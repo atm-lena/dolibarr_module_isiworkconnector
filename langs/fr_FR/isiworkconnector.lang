@@ -6,7 +6,7 @@ ATMAbout = Ce module a été développé par <a href="http://www.atm-consulting.
 isiworkconnectorSetup = Configuration du module isiworkconnector
 isiworkconnectorAbout = A propos du module isiworkconnector
 
-isiworkconnector=isiworkconnector
+isiworkconnector=Connecteur ISIwork
 AbricotNeedUpdate=Le module abricot doit être mis à jour
 
 # SETUP
@@ -36,25 +36,6 @@ isiworkconnectorStatusShortValidated=Validée
 isiworkconnectorStatusShortRefused=Refusée
 isiworkconnectorStatusShortAccepted=Acceptée
 
-# LIST
-isiworkconnectorList=Liste isiworkconnector
-Noisiworkconnector=(vide)
-
-# CARD
-Newisiworkconnector=Création isiworkconnector
-isiworkconnectorCard=Fiche isiworkconnector
-
-isiworkconnectorModify=Modifier
-isiworkconnectorClone=Cloner
-isiworkconnectorValid=Valider
-isiworkconnectorAccept=Accepter
-isiworkconnectorRefuse=Refuser
-isiworkconnectorReopen=Rouvrir
-isiworkconnectorCancel=Abandonner
-isiworkconnectorDelete=Supprimer
-
-ConfirmValidateisiworkconnectorTitle=Confirmation d'activation
-ConfirmValidateisiworkconnectorBody=Souhaitez-vous vraiment activer cette fiche isiworkconnector %s ?
-
-ConfirmDeleteisiworkconnectorTitle=Confirmation de suppression
-ConfirmDeleteisiworkconnectorBody=Souhaitez-vous vraiment supprimer cette fiche isiworkconnector %s ?
+# INTERFACE
+Process=Traiter
+FilesWaiting = document(s) en attente
