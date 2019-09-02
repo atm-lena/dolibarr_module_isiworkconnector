@@ -13,6 +13,12 @@ AbricotNeedUpdate=Le module abricot doit être mis à jour
 ParamLabel=Nom du paramètre
 ParamDesc=Une description si besoin
 ParamHelp=Le contenu de l'aide
+FTParameters= Configuration de l'accés FTP Optilog
+IWCONNECTOR_FTP_HOST=Hôte
+IWCONNECTOR_FTP_PORT=Port
+IWCONNECTOR_FTP_USER=Identifiant
+IWCONNECTOR_FTP_PASS=Mot de passe
+IWCONNECTOR_FTP_PASSIVE_MODE=Mode passif
 
 # MENU
 TopMenuisiworkconnector=isiworkconnector

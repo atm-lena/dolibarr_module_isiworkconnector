@@ -108,20 +108,14 @@ if(!function_exists('setup_print_title')){
 
 setup_print_title("Parameters");
 
-// Example with a yes / no select
-setup_print_on_off('CONSTNAME', $langs->trans('ParamLabel'), 'ParamDesc');
+//Accès FTP
+setup_print_title('FTParameters');
 
-// Example with imput
-setup_print_input_form_part('CONSTNAME', $langs->trans('ParamLabel'));
-
-// Example with color
-setup_print_input_form_part('CONSTNAME', $langs->trans('ParamLabel'), 'ParamDesc', array('type'=>'color'), 'input', 'ParamHelp');
-
-// Example with placeholder
-//setup_print_input_form_part('CONSTNAME',$langs->trans('ParamLabel'),'ParamDesc',array('placeholder'=>'http://'),'input','ParamHelp');
-
-// Example with textarea
-//setup_print_input_form_part('CONSTNAME',$langs->trans('ParamLabel'),'ParamDesc',array(),'textarea');
+setup_print_input_form_part('IWCONNECTOR_FTP_HOST');
+setup_print_input_form_part('IWCONNECTOR_FTP_PORT', false, '', array('placeholder' => 21));
+setup_print_input_form_part('IWCONNECTOR_FTP_USER');
+setup_print_input_form_part('IWCONNECTOR_FTP_PASS', false);
+setup_print_on_off('IWCONNECTOR_FTP_PASSIVE_MODE');
 
 
 print '</table>';
