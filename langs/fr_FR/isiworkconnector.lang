@@ -19,6 +19,7 @@ IWCONNECTOR_FTP_PORT=Port
 IWCONNECTOR_FTP_USER=Identifiant
 IWCONNECTOR_FTP_PASS=Mot de passe
 IWCONNECTOR_FTP_PASSIVE_MODE=Mode passif
+IWCONNECTOR_FTP_FOLDER=Chemin de dépôt ISIWork personnalisé sur le serveur FTP
 
 # MENU
 TopMenuisiworkconnector=isiworkconnector
