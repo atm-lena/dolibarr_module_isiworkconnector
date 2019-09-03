@@ -84,8 +84,96 @@ class isiworkconnector extends SeedObject
 //		$this->init();
 //    }
 
-    public function getWaitingFiles(){
-       //TO DO : return num of waiting files in FTP server
+    /*
+     * Nombre de fichiers XML en attente dans le serveur ftp
+     */
+
+    public function get_nb_XMLFilesFTP(){
+
+        $res = $this->get_XMLFilesFTP();
+
+        if(is_array($res)) {
+            return count($res);
+        } else {
+            return 0;
+        }
+    }
+
+    /*
+     *  Retourne la liste des fichiers XML du serveur ftp
+     */
+    public function get_XMLFilesFTP (){
+        global $conf, $db;
+
+        require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
+        require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+
+        $error = 0;
+
+        //INFORMATIONS FTP
+        $ftp_host = (empty($conf->global->IWCONNECTOR_FTP_HOST)) ? "" : $conf->global->IWCONNECTOR_FTP_HOST;
+        $ftp_port = (empty($conf->global->IWCONNECTOR_FTP_PORT)) ? 21 : $conf->global->IWCONNECTOR_FTP_PORT;
+        $ftp_user = (empty($conf->global->IWCONNECTOR_FTP_USER)) ? "" : $conf->global->IWCONNECTOR_FTP_USER;
+        $ftp_pass = (empty($conf->global->IWCONNECTOR_FTP_PASS)) ? "" : $conf->global->IWCONNECTOR_FTP_PASS;
+        $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
+        $timeout = 120;
+
+        if(empty($ftp_host)) {
+            $error++;
+            $this->errors[] = "Information de connection FTP invalide : hôte non-défini";
+        }
+
+        //CONNEXION FTP
+        if(!$error) $ftpc = ftp_connect($ftp_host, $ftp_port);
+
+        if(!$ftpc){
+            $error++;
+            $this->errors[] = "Erreur de connection ftp";
+        }
+
+        //AUTHENTIFICATION FTP
+        if(!$error) $res_log = ftp_login($ftpc, $ftp_user, $ftp_pass);
+
+        if(!$res_log){
+            $error++;
+            $this->errors[] = "Erreur de login ftp";
+        }
+
+        //MODE PASSIF FTP
+        if (!empty($conf->global->IWCONNECTOR_FTP_PASSIVE_MODE))
+        {
+            ftp_pasv($ftpc, true);
+        }
+
+        //DOSSIER COURANT FTP
+        if(!$error) $res_dir = ftp_chdir($ftpc, $ftp_folder);
+
+        if(!$res_dir)
+        {
+            $error++;
+            $this->errors[] = "Erreur de répertoire ftp".$ftp_folder;
+        }
+
+        if(!$error){                                                                                //CONNEXION FTP OK
+
+            //LISTE FICHIERS
+            $TFile = ftp_mlsd($ftpc,ftp_pwd($ftpc));
+
+            //LISTE FIHIERS XML A TRAITER
+            $TFileXML = array();
+            foreach ($TFile as $file){
+                if($file['name'] != "." && $file['name'] != ".." && $file['type'] == "file" ) {
+                    $filetype = pathinfo($file['name'], PATHINFO_EXTENSION);                //on récupère l'extension des fichiers
+                    if($filetype == "xml") {
+                        $TFileXML[] = $file;
+                    }
+                }
+            }
+            return $TFileXML;
+        } else {                                                                                    //CONNEXION FTP OUT
+            setEventMessages('', $this->errors[0], "errors");
+            return 0;
+        }
     }
 
     /**

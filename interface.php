@@ -25,12 +25,12 @@ if (empty($reshook))
     $error = 0;
     switch ($action) {
         case 'process':
-            //TO DO : process of FTP server files
+            //TO DO : import FTP server files
             header('Location: ' . dol_buildpath('/isiworkconnector/interface.php', 1));
             exit;
+        default :
+            $nb_waitingfiles = $object->get_nb_XMLFilesFTP();
     }
-
-
 }
 
 
@@ -42,8 +42,8 @@ llxHeader('', $title);
 print load_fiche_titre($langs->trans('ISIWork'), '', 'isiworkconnector@isiworkconnector');
 
 
-print "<div>". $object->getWaitingFiles() . " " . $langs->trans('FilesWaiting'). "</div><br>";
-print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=process">'.$langs->trans("Process").'</a></div>'."\n";
+print "<div>". $nb_waitingfiles . " " . $langs->trans('FilesWaiting'). "</div><br>";
+print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=process">'.$langs->trans("IWImport").'</a></div>'."\n";
 
 
 

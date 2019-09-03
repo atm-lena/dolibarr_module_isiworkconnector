@@ -114,7 +114,8 @@ setup_print_title('FTParameters');
 setup_print_input_form_part('IWCONNECTOR_FTP_HOST');
 setup_print_input_form_part('IWCONNECTOR_FTP_PORT', false, '', array('placeholder' => 21));
 setup_print_input_form_part('IWCONNECTOR_FTP_USER');
-setup_print_input_form_part('IWCONNECTOR_FTP_PASS', false);
+setup_print_input_form_part('IWCONNECTOR_FTP_PASS', false, '', array('type'=> 'password'));
+setup_print_input_form_part('IWCONNECTOR_FTP_FOLDER');
 setup_print_on_off('IWCONNECTOR_FTP_PASSIVE_MODE');
 
 

@@ -39,3 +39,4 @@ isiworkconnectorStatusShortAccepted=Acceptée
 # INTERFACE
 Process=Traiter
 FilesWaiting = document(s) en attente
+IWImport=Importer
