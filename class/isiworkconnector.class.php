@@ -84,7 +84,114 @@ class isiworkconnector extends SeedObject
 //		$this->init();
 //    }
 
-    /*
+    public function runImportFiles(){
+        global $conf;
+
+        $error = 0;
+
+        $res = isiworkconnector::transferFilesFTP();
+
+        if(empty($res)) {
+            $error ++;
+            $this->errors[] = 'Erreur : transfert des fichiers du serveur FTP en local incomplet';
+        }
+
+        if(!$error) {
+
+        }
+
+    }
+
+    public function transferFilesFTP(){
+        global $conf;
+
+        require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
+        require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+
+        $error = 0;
+
+        //INFORMATIONS FTP
+        $ftp_host = (empty($conf->global->IWCONNECTOR_FTP_HOST)) ? "" : $conf->global->IWCONNECTOR_FTP_HOST;
+        $ftp_port = (empty($conf->global->IWCONNECTOR_FTP_PORT)) ? 21 : $conf->global->IWCONNECTOR_FTP_PORT;
+        $ftp_user = (empty($conf->global->IWCONNECTOR_FTP_USER)) ? "" : $conf->global->IWCONNECTOR_FTP_USER;
+        $ftp_pass = (empty($conf->global->IWCONNECTOR_FTP_PASS)) ? "" : $conf->global->IWCONNECTOR_FTP_PASS;
+        $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
+        $timeout = 120;
+
+        if(empty($ftp_host)) {
+            $error++;
+            $this->errors[] = "Information de connection FTP invalide : hôte non-défini";
+        }
+
+        //CONNEXION FTP
+        if(!$error) $ftpc = ftp_connect($ftp_host, $ftp_port);
+
+        if(!$ftpc){
+            $error++;
+            $this->errors[] = "Erreur de connection ftp";
+        }
+
+        //AUTHENTIFICATION FTP
+        if(!$error) $res_log = ftp_login($ftpc, $ftp_user, $ftp_pass);
+
+        if(!$res_log){
+            $error++;
+            $this->errors[] = "Erreur de login ftp";
+        }
+
+        //MODE PASSIF FTP
+        if (!empty($conf->global->IWCONNECTOR_FTP_PASSIVE_MODE))
+        {
+            ftp_pasv($ftpc, true);
+        }
+
+        //DOSSIER COURANT FTP
+        if(!$error) $res_dir = ftp_chdir($ftpc, $ftp_folder);
+
+        if(!$res_dir)
+        {
+            $error++;
+            $this->errors[] = "Erreur de répertoire ftp".$ftp_folder;
+        }
+
+        if(!$error){                                                                            //CONNEXION FTP OK
+
+            //CREATION DOSSIER "TRAITE" SI INEXISTANT
+            $dir = $conf->isiworkconnector->dir_output . '/traite';
+            if(!is_dir($dir)){
+                dol_mkdir($dir);
+            }
+
+            //LISTE DES FICHIERS FTP
+            $TFile = ftp_mlsd($ftpc,ftp_pwd($ftpc));
+
+            foreach ($TFile as $file) {
+                if ($file['name'] != '.' && $file['name'] != '..' && $file['type'] == 'file') {
+                    $local_file = $conf->isiworkconnector->dir_output . '/' . $file['name'];
+                    $remote_file = $file['name'];
+                    //TRANSFERT DU FICHIER FTP EN LOCAL
+                    $res = ftp_get($ftpc, $local_file, $remote_file, FTP_ASCII);
+                    if($res){
+                        //SI TRANFERT OK, SUPPRESSION DU FICHIER SUR LE SERVEUR FTP
+                        ftp_delete($ftpc, $remote_file);
+                    } else {
+                        $error ++;
+                        $this->errors[] = "Echec transfert du document : " . $file['name'];
+                    }
+                }
+            }
+            if(!$error){
+                return 1;
+            }
+        }
+
+        if($error) {                                                                            //CONNEXION FTP OUT
+            setEventMessages('', $this->errors[0], "errors");
+            return 0;
+        }
+    }
+
+    /**
      * Nombre de fichiers XML en attente dans le serveur ftp
      */
 
@@ -99,11 +206,12 @@ class isiworkconnector extends SeedObject
         }
     }
 
-    /*
+    /**
      *  Retourne la liste des fichiers XML du serveur ftp
      */
+
     public function get_XMLFilesFTP (){
-        global $conf, $db;
+        global $conf;
 
         require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
         require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
