@@ -174,12 +174,12 @@ class isiworkconnector extends SeedObject
                 $objXml = simplexml_load_file('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path);
 
                 //ON VERIFIE L'EXISTANCE DU FICHIER PDF ASSOCIE AU XML
-                $filePDF = isiworkconnector::verifyPDFLinkedToXML($fileXML, $TFilePDF);
+                $filePDF = isiworkconnector::verifyPDFLinkedToXML($objXml, $TFilePDF);
 
                 //TRAITEMENT FACTURE FOURNISSEUR
                 if($objXml->type == 'Facture fournisseur'){
                     if($filePDF) {
-                        $res = isiworkconnector::createDolibarrInvoiceSupplier($objXml, $filePDF);       //si le fichier pdf existe, on crée la facture
+                        $res = isiworkconnector::createDolibarrInvoiceSupplier($objXml, $fileXML, $filePDF, $ftpc);       //si le fichier pdf existe, on crée la facture
                     } else {
                         $error ++;
                         $this->errors[] = "Impossible de créer la facture " . $objXml->ref. " : PDF introuvable";
@@ -204,11 +204,11 @@ class isiworkconnector extends SeedObject
     }
 
 
-    public function createDolibarrInvoiceSupplier($objXml, $filePDF){
+    public function createDolibarrInvoiceSupplier($objXml, $fileXML, $filePDF, $ftpc){
         //TODO : créer une facture fournisseur à partir du xml
         //return 1 si ok, return 0 si pas ok
 
-        global $db, $user;
+        global $db, $user, $conf;
 
         require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
         require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.class.php';
@@ -251,20 +251,54 @@ class isiworkconnector extends SeedObject
         }
 
 
-        //DONNEES OBLIGATOIRES OK
+        //DONNEES OBLIGATOIRES OK : CREATION FACTURE
         if(!$error){
+            //TODO : PENSER AU PDF
+
             //RAJOUT DONNEES NON OBLIGATOIRE
             if(!empty($objXml->date_echeance)){
                 $supplierInvoice->date_echeance = strftime('%Y-%m-%d',strtotime($objXml->date_echeance));
             }
 
-            //CREATION DE LA FACTURE
-            $res = $supplierInvoice->create($user);
+            //CREATION DE LA FACTURE ET SES PIECES JOINTES
+            $supplierInvoiceID = $supplierInvoice->create($user);
 
-            if($res<=0){
+                //ON RECUPERE LA FACTURE CREE
+                $supplierInvoice->fetch($supplierInvoiceID);
+
+                //ON JOINT LE FICHIER PDF ET XML A LA FACTURE
+                $ref = dol_sanitizeFileName($supplierInvoice->ref);
+                $local_dir = $conf->fournisseur->facture->dir_output . '/' . get_exdir($supplierInvoice->id, 2, 0, 0, $supplierInvoice, 'invoice_supplier') . $ref;
+                if (!dol_is_dir($local_dir)) {
+                    dol_mkdir($local_dir);
+                }
+
+                $remote_file_pdf = $filePDF['name'];
+                $remote_file_xml = $fileXML['name'];
+
+                $local_file_pdf = $local_dir . '/' . $remote_file_pdf;
+                $local_file_xml = $local_dir . '/' . $remote_file_xml;
+
+                $res = ftp_get($ftpc, $local_file_pdf, $remote_file_pdf, FTP_ASCII);
+                if(!$res){
+                    $error++;
+                    $this->errors[] = 'Fichier pdf non joint';
+                }
+
+                $res = ftp_get($ftpc, $local_file_xml, $remote_file_xml, FTP_ASCII);
+                if(!$res){
+                    $error++;
+                    $this->errors[] = 'Fichier xml non joint';
+                }
+
+            if($supplierInvoiceID<=0){
                 $error++;
                 $this->errors[] = 'Echec création de la facture';
             }
+        }
+
+        if(!$error){
+            //AJOUT LIGNES ET/OU VALIDATION
         }
 
         //TODO : création de la facture OK --> si des lignes rajout lignes + validation sinon direct validation
@@ -281,11 +315,16 @@ class isiworkconnector extends SeedObject
 
     }
 
-    public function verifyPDFLinkedToXML($fileXML, $TFilePDF){
+    public function verifyPDFLinkedToXML($objXml, $TFilePDF){
 
-        foreach($TFilePDF as $filePDF){
-            if (pathinfo($fileXML['name'], PATHINFO_FILENAME) == pathinfo($filePDF['name'], PATHINFO_FILENAME)){
-                return $filePDF;
+        if(!empty($objXml->DocPath)) {
+            $PDFlinkedtoXML = str_replace("\\", "/", $objXml->DocPath->__toString());
+            $PDFlinkedtoXML =  basename($PDFlinkedtoXML);
+
+            foreach ($TFilePDF as $filePDF) {
+                if ($PDFlinkedtoXML == $filePDF['name']){
+                    return $filePDF;
+                }
             }
         }
 
