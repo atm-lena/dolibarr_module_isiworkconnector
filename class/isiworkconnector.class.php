@@ -171,23 +171,29 @@ class isiworkconnector extends SeedObject
 
                 //OUVERTURE DU FICHIER XML SUR LE SERVEUR FTP
                 $ftp_file_path = $ftp_folder.$fileXML['name'];
-                $xml = simplexml_load_file('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path);
+                $objXml = simplexml_load_file('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path);
+
+                //ON VERIFIE L'EXISTANCE DU FICHIER PDF ASSOCIE AU XML
+                $filePDF = isiworkconnector::verifyPDFLinkedToXML($fileXML, $TFilePDF);
 
                 //TRAITEMENT FACTURE FOURNISSEUR
-                if($xml->type == 'Facture fournisseur'){
-
-                    $res = isiworkconnector::verifyPDFLinkedToXML($fileXML['name'], $TFilePDF);          //on vérifie si le pdf lié au fichier xml existe
-
-                    if($res) {
-                        isiworkconnector::createDolibarrInvoice($xml);                                  //si le fichier pdf existe, on créé la facture
+                if($objXml->type == 'Facture fournisseur'){
+                    if($filePDF) {
+                        $res = isiworkconnector::createDolibarrInvoiceSupplier($objXml, $filePDF);       //si le fichier pdf existe, on crée la facture
                     } else {
                         $error ++;
-                        $this->errors[] = "Impossible de créer la facture" . $xml->label . " : PDF introuvable";
+                        $this->errors[] = "Impossible de créer la facture " . $objXml->ref. " : PDF introuvable";
                     }
                 }
-            }
 
+                //DEPLACEMENT FICHIERS XML ET PDF DANS LE DOSSIER TRAITE
+                if(!empty($res)){
+                    //TODO : déplacer le fichier xml et pdf dans le
+                }
+            }
         }
+
+//        exit;
 
         if($error) {                                                                            //CONNEXION FTP OUT
             setEventMessages('', $this->errors, "errors");
@@ -198,12 +204,92 @@ class isiworkconnector extends SeedObject
     }
 
 
-    public function createDolibarrInvoice($xml){
+    public function createDolibarrInvoiceSupplier($objXml, $filePDF){
         //TODO : créer une facture fournisseur à partir du xml
+        //return 1 si ok, return 0 si pas ok
+
+        global $db, $user;
+
+        require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
+        require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.class.php';
+
+//        var_dump($objXml);
+
+        $error = 0;
+
+        //on crée un nouvel objet facture
+        $supplierInvoice = new FactureFournisseur($db);
+
+        //ON RENSEIGNE LES INFORMATIONS OBLIGATOIRES POUR UNE FACTURE
+        if(!empty($objXml->ref) && !empty($objXml->fournisseur) && !empty($objXml->date) && !empty($objXml->ref_supplier)){
+
+            //on vérifie si la ref facture n'existe pas déjà
+            $res = $supplierInvoice->fetch('', $objXml->ref);
+            if(!empty($res)){
+                $error++;
+                $this->errors[] = 'Impossible de créer la facture : la référence "' . $objXml->ref . '" existe déjà';
+            }
+
+            //on vérifie si le fournisseur existe
+            $sql = 'SELECT * FROM ' .MAIN_DB_PREFIX. 'societe WHERE code_fournisseur IS NOT NULL AND nom = "'. $objXml->fournisseur . '";';
+            $resql = $db->query($sql);
+            if(!($db->num_rows($resql)) || $db->num_rows($resql) > 1){
+                $error++;
+                $this->errors[] = 'Impossible de créer la facture : le fournisseur "' .$objXml->fournisseur. '" n\'existe pas';
+            } else {
+                $supplier = $db->fetch_object($resql);
+                $supplierInvoice->socid = $supplier->rowid;
+            }
+
+            $supplierInvoice->date = strftime('%Y-%m-%d',strtotime($objXml->date));
+
+            $supplierInvoice->ref_supplier = $objXml->ref_supplier->__toString();
+
+        } else {
+            $error++;
+            $this->errors[] = 'Impossible de créer la facture ' . pathinfo($objXml->DocPath, PATHINFO_FILENAME) . ' : fichier xml incomplet';
+        }
+
+
+        //DONNEES OBLIGATOIRES OK
+        if(!$error){
+            //RAJOUT DONNEES NON OBLIGATOIRE
+            if(!empty($objXml->date_echeance)){
+                $supplierInvoice->date_echeance = strftime('%Y-%m-%d',strtotime($objXml->date_echeance));
+            }
+
+            //CREATION DE LA FACTURE
+            $res = $supplierInvoice->create($user);
+
+            if($res<=0){
+                $error++;
+                $this->errors[] = 'Echec création de la facture';
+            }
+        }
+
+        //TODO : création de la facture OK --> si des lignes rajout lignes + validation sinon direct validation
+        //TODO : lors de la validation d'une facture, bien penser à donner la référent $objXml->ref (car avant la validation, elle n'est pas valable)
+        //TODO : création des lignes : pour chaque ligne, vérification infos obligatoires --> si OK création ajout lignes
+
+
+        if($error) {                                                                            //CONNEXION FTP OUT
+            setEventMessages('', $this->errors, "errors");
+            return 0;
+        } else {
+            return 1;
+        }
+
     }
 
-    public function verifyPDFLinkedToXML($FileXML, $TFilePDF){
-        //TODO : vérifier si le fichier XML a bien un PDF associé dans le tableau donné, retourne true ou false
+    public function verifyPDFLinkedToXML($fileXML, $TFilePDF){
+
+        foreach($TFilePDF as $filePDF){
+            if (pathinfo($fileXML['name'], PATHINFO_FILENAME) == pathinfo($filePDF['name'], PATHINFO_FILENAME)){
+                return $filePDF;
+            }
+        }
+
+        return 0;
     }
 
     /**
