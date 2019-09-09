@@ -171,6 +171,7 @@ class isiworkconnector extends SeedObject
 
                 //OUVERTURE DU FICHIER XML SUR LE SERVEUR FTP
                 $ftp_file_path = $ftp_folder.$fileXML['name'];
+
                 $objXml = simplexml_load_file('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path);
 
                 //ON VERIFIE L'EXISTANCE DU FICHIER PDF ASSOCIE AU XML
@@ -180,20 +181,27 @@ class isiworkconnector extends SeedObject
                 if($objXml->type == 'Facture fournisseur'){
                     if($filePDF) {
                         $res = isiworkconnector::createDolibarrInvoiceSupplier($objXml, $fileXML, $filePDF, $ftpc);       //si le fichier pdf existe, on crée la facture
+
+                        if(empty($res)){
+                            $error ++;
+                            $this->errors[] = "Impossible de créer la facture depuis le fichier : " . $fileXML['name'];
+                        }
+
                     } else {
                         $error ++;
-                        $this->errors[] = "Impossible de créer la facture " . $objXml->ref. " : PDF introuvable";
+                        $this->errors[] = "Impossible de créer la facture " . $objXml->ref. " : PDF du fichier '" . $fileXML['name'] .  "' introuvable";
                     }
+                } else {
+                    $error ++;
+                    $this->errors[] = "Le type '" . $objXml->type .  "' du document " . $fileXML['name'] . " est invalide";
                 }
 
-                //DEPLACEMENT FICHIERS XML ET PDF DANS LE DOSSIER TRAITE
-                if(!empty($res)){
-                    //TODO : déplacer le fichier xml et pdf dans le
+                //DEPLACEMENT FICHIERS XML ET PDF DANS LE DOSSIER "TRAITE"
+                if(!$error){
+                    isiworkconnector::cleanFTPDirectory($ftp_folder, $ftp_port, $ftp_host, $ftp_pass, $fileXML, $ftp_user,  $filePDF);
                 }
             }
         }
-
-//        exit;
 
         if($error) {                                                                            //CONNEXION FTP OUT
             setEventMessages('', $this->errors, "errors");
@@ -203,17 +211,35 @@ class isiworkconnector extends SeedObject
         }
     }
 
+    public function cleanFTPDirectory($ftp_folder, $ftp_port, $ftp_host, $ftp_pass, $fileXML, $ftp_user,  $filePDF){
+
+        $ftp_file_path_dest = $ftp_folder.'/Traité/'.$fileXML['name'];
+        $ftp_file_path_xml = $ftp_folder.$fileXML['name'];
+        copy('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_xml, 'ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_dest);
+        unlink('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_xml);
+
+        $ftp_file_path_dest_pdf = $ftp_folder.'/Traité/'.$filePDF['name'];
+        $ftp_file_path_pdf = $ftp_folder.$filePDF['name'];
+        copy('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_pdf, 'ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_dest_pdf);
+        unlink('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_pdf);
+    }
+
+    /**
+     *    Création d'une facture fournisseur à partir d'un fichier XML FTP donné
+     *
+     *    @param      object                objet XML
+     *                string                fichier XML
+     *                string                fichier PDF
+     *                FTP Buffer            connexion ftp vers les fichiers concernés
+     *    @return     int    	     		1 si OK, < 0 si KO, 0 si création OK mais erreurs
+     */
 
     public function createDolibarrInvoiceSupplier($objXml, $fileXML, $filePDF, $ftpc){
-        //TODO : créer une facture fournisseur à partir du xml
-        //return 1 si ok, return 0 si pas ok
 
         global $db, $user, $conf;
 
         require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
         require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.class.php';
-
-//        var_dump($objXml);
 
         $error = 0;
 
@@ -250,10 +276,38 @@ class isiworkconnector extends SeedObject
             $this->errors[] = 'Impossible de créer la facture ' . pathinfo($objXml->DocPath, PATHINFO_FILENAME) . ' : fichier xml incomplet';
         }
 
+        //VERIFICATION DES PRODUITS/SERVICES
+        if ($objXml->lines) {
+            $TSupplierProduct = array();
+            foreach ($objXml->lines as $item) {
+                foreach ($item as $line) {
+                    //id produit
+                    $refProduct = $line->ref->__toString();
+                    $sql = 'SELECT * FROM llx_product WHERE ref = "' . $refProduct . '"';
+                    $resql = $db->query($sql);
 
-        //DONNEES OBLIGATOIRES OK : CREATION FACTURE
+                    if($db->num_rows($resql) == 1) {
+                        $product = $db->fetch_object($resql);
+                        $TSupplierProduct[$refProduct]['id'] = $product->rowid;
+                        $TSupplierProduct[$refProduct]['type'] = $product->fk_product_type;
+                    } else {
+                        if ($db->num_rows($resql) == 0) {
+                            $error++;
+                            $this->errors[] = 'Produit/service "' . $refProduct . '" inexistant';
+                            continue;
+                        } elseif ($db->num_rows($resql) > 1) {
+                            $error++;
+                            $this->errors[] = 'Impossible de déterminer le produit correspondant : ' . $refProduct;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+
+        //DONNEES OBLIGATOIRES OK ET PRODUITS/SERVICES OK : CREATION FACTURE
         if(!$error){
-            //TODO : PENSER AU PDF
 
             //RAJOUT DONNEES NON OBLIGATOIRE
             if(!empty($objXml->date_echeance)){
@@ -265,6 +319,9 @@ class isiworkconnector extends SeedObject
 
                 //ON RECUPERE LA FACTURE CREE
                 $supplierInvoice->fetch($supplierInvoiceID);
+
+                //REFERENCE EXTERNE
+                $supplierInvoice->update_ref_ext($fileXML['name']);
 
                 //ON JOINT LE FICHIER PDF ET XML A LA FACTURE
                 $ref = dol_sanitizeFileName($supplierInvoice->ref);
@@ -297,17 +354,62 @@ class isiworkconnector extends SeedObject
             }
         }
 
-        if(!$error){
-            //AJOUT LIGNES ET/OU VALIDATION
+        if(!$error) {
+
+            if ($TSupplierProduct){
+                foreach ($TSupplierProduct as $product) {
+
+
+                        //id produit
+                        $idProduct = $product['id'];
+
+                        //type produit
+                        $typeProduct = $product['type'];
+
+                        //quantité
+                        $qty = $line->qty->__toString();
+
+                        //réduction
+                        $remise_percent = $line->remise_percent->__toString();
+
+                        //description
+                        $description = $line->description->__toString();
+
+                        //prix unitaire ht
+                        $pu_ht = $line->pu_ht->__toString();
+
+                        //taux de tva
+                        $tva_tx = $line->tva_tx->__toString();
+
+                        if (!$error) {
+                            //ajout ligne
+                            $supplierInvoice->addline(
+                                '',
+                                $pu_ht,
+                                $tva_tx,
+                                '',
+                                '',
+                                $qty,
+                                $idProduct,
+                                $remise_percent,
+                                '',
+                                '',
+                                '',
+                                '',
+                                'HT',
+                                $typeProduct);
+
+                        }
+                }
+            }
         }
 
-        //TODO : création de la facture OK --> si des lignes rajout lignes + validation sinon direct validation
-        //TODO : lors de la validation d'une facture, bien penser à donner la référent $objXml->ref (car avant la validation, elle n'est pas valable)
-        //TODO : création des lignes : pour chaque ligne, vérification infos obligatoires --> si OK création ajout lignes
-
+        //VALIDATION FACTURE
+        if(!$error){
+            $supplierInvoice->validate($user);
+        }
 
         if($error) {                                                                            //CONNEXION FTP OUT
-            setEventMessages('', $this->errors, "errors");
             return 0;
         } else {
             return 1;
