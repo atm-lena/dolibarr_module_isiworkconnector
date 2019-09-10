@@ -145,6 +145,7 @@ class isiworkconnector extends SeedObject
         //CONNEXION FTP
         if(!$error) $ftpc = ftp_connect($ftp_host, $ftp_port);
 
+
         if(!$ftpc){
             $error++;
             $this->errors[] = "Erreur de connection ftp";
@@ -165,7 +166,8 @@ class isiworkconnector extends SeedObject
         }
 
         //DOSSIER COURANT FTP
-        if(!empty($folder)) {
+        if(!empty($ftp_folder)) {
+
             if (!$error) $res_dir = ftp_chdir($ftpc, $ftp_folder);
 
             if (!$res_dir) {
@@ -451,26 +453,28 @@ class isiworkconnector extends SeedObject
 
         $ftpc = isiworkconnector::FTPConnection();
 
-        if(!empty($ftpc)){                                                                                //CONNEXION FTP OK
+        if(!empty($ftpc)){
 
-            //LISTE FICHIERS SUR LE SERVEUR FTP
+            //CONNEXION FTP OK
             $TFilesFTP = ftp_mlsd($ftpc,ftp_pwd($ftpc));
 
             //LISTE DES FICHIERS FTP PAR TYPE
-            $TFiles = array();
-            foreach ($TFilesFTP as $file){
-                if($file['name'] != "." && $file['name'] != ".." && $file['type'] == "file" ) {
-                    $filetype = pathinfo($file['name'], PATHINFO_EXTENSION);                //on récupère l'extension des fichiers
-                    if($filetype == "xml") {
-                        $TFiles['xml'][] = $file;
-                    } elseif($filetype == "pdf") {
-                        $TFiles['pdf'][] = $file;
+            if(!empty($TFilesFTP)) {
+                $TFiles = array();
+                foreach ($TFilesFTP as $file) {
+                    if ($file['name'] != "." && $file['name'] != ".." && $file['type'] == "file") {
+                        $filetype = pathinfo($file['name'], PATHINFO_EXTENSION);                //on récupère l'extension des fichiers
+                        if ($filetype == "xml") {
+                            $TFiles['xml'][] = $file;
+                        } elseif ($filetype == "pdf") {
+                            $TFiles['pdf'][] = $file;
+                        }
+                    } elseif ($file['type'] == "dir") {
+                        $TFiles['dir'][] = $file;
                     }
-                } elseif($file['type'] == "dir"){
-                    $TFiles['dir'][] = $file;
                 }
+                return $TFiles;
             }
-            return $TFiles;
         } else {                                                                                    //CONNEXION FTP OUT
             return 0;
         }
