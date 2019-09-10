@@ -245,7 +245,7 @@ class isiworkconnector extends SeedObject
         if(!empty($objXml->ref) && !empty($objXml->fournisseur) && !empty($objXml->date) && !empty($objXml->ref_supplier)){
 
             //on vérifie si la ref facture n'existe pas déjà
-            $res = $supplierInvoice->fetch('', $objXml->ref);
+            $res = $supplierInvoice->fetch('', $objXml->ref->__toString());
             if(!empty($res)){
                 $error++;
                 $this->errors[] = 'Impossible de créer la facture : la référence "' . $objXml->ref . '" existe déjà';
@@ -401,7 +401,7 @@ class isiworkconnector extends SeedObject
 
         //VALIDATION FACTURE
         if(!$error){
-            $supplierInvoice->validate($user);
+            $supplierInvoice->validate($user, $objXml->ref->__toString());
         }
 
         if($error) {                                                                            //CONNEXION FTP OUT
