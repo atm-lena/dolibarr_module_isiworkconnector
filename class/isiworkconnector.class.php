@@ -27,77 +27,106 @@ if (!class_exists('SeedObject'))
 
 class isiworkconnector extends SeedObject
 {
-//    /**
-//     * Canceled status
-//     */
-//    const STATUS_CANCELED = -1;
-//    /**
-//     * Draft status
-//     */
-//    const STATUS_DRAFT = 0;
-//	/**
-//	 * Validated status
-//	 */
-//	const STATUS_VALIDATED = 1;
-//	/**
-//	 * Refused status
-//	 */
-//	const STATUS_REFUSED = 3;
-//	/**
-//	 * Accepted status
-//	 */
-//	const STATUS_ACCEPTED = 4;
-//
-//	/** @var array $TStatus Array of translate key for each const */
-//	public static $TStatus = array(
-//		self::STATUS_CANCELED => 'isiworkconnectorStatusShortCanceled'
-//		,self::STATUS_DRAFT => 'isiworkconnectorStatusShortDraft'
-//		,self::STATUS_VALIDATED => 'isiworkconnectorStatusShortValidated'
-////		,self::STATUS_REFUSED => 'isiworkconnectorStatusShortRefused'
-////		,self::STATUS_ACCEPTED => 'isiworkconnectorStatusShortAccepted'
-//	);
-
-	public $table_element = 'isiworkconnector';
-
-	public $element = 'isiworkconnector';
-
-//	/** @var int $isextrafieldmanaged Enable the fictionalises of extrafields */
-//    public $isextrafieldmanaged = 1;
-
-//    /** @var int $ismultientitymanaged 0=No test on entity, 1=Test with field entity, 2=Test with link by societe */
-//    public $ismultientitymanaged = 1;
-
-//    public $fields = array(
-//
-//    );
-
-//    /**
-//     * isiworkconnector constructor.
-//     * @param DoliDB    $db    Database connector
-//     */
-//    public function __construct($db)
-//    {
-//		global $conf;
-//
-//        parent::__construct($db);
-//
-//		$this->init();
-//    }
 
     public function runImportFiles(){
         global $conf;
 
-        $error = 0;
-
-        $res = isiworkconnector::filesProcessing();
-
-    }
-
-    public function filesProcessing(){
-        global $conf;
-
         require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
         require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+
+        $error = 0;
+
+        //CONNEXION FTP
+        $ftpc = isiworkconnector::FTPConnection();
+
+        if(!empty($ftpc)){                                                                            //CONNEXION FTP OK
+
+            //LISTE DES FICHIERS XML / PDF ET DOSSIERS SUR LE FTP
+            $TFiles = isiworkconnector::get_FilesFTP();
+
+            $TFilesXML = (empty($TFiles['xml'])) ? array() : $TFiles['xml'];  //liste des fichiers xml serveur ftp
+            $TFilesPDF = (empty($TFiles['pdf'])) ? array() : $TFiles['pdf'];  //liste des fichiers pdf serveur ftp
+            $TDirs = (empty($TFiles['dir'])) ? array() : $TFiles['dir'];  //liste des dossiers serveur ftp
+
+            //CREATION DOSSIER "TRAITE" SI IL N'EXISTE PAS
+            $TDirsName = array();
+            if(!empty($TDirs)){
+                foreach($TDirs as $dir){
+                    $TDirsName[] = $dir['name'];
+                }
+            }
+            if((!in_array("Traité", $TDirsName))){
+                ftp_mkdir($ftpc, "Traité");
+            }
+
+            //TRAITEMENT DES FICHIERS XML
+            foreach ($TFilesXML as $fileXML){
+
+                //OUVERTURE DU FICHIER XML SUR LE SERVEUR FTP
+                $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
+                $ftp_file_path = $ftp_folder.$fileXML['name'];
+
+                $objXml = simplexml_load_file('ftp://'.$conf->global->IWCONNECTOR_FTP_USER.':'.$conf->global->IWCONNECTOR_FTP_PASS.'@'.$conf->global->IWCONNECTOR_FTP_HOST.':'.$conf->global->IWCONNECTOR_FTP_PORT.$ftp_file_path);
+
+                if($objXml) {
+
+                    //TRAITEMENT FACTURE FOURNISSEUR
+                    if ($objXml->type == 'Facture fournisseur') {
+
+                        //ON VERIFIE L'EXISTANCE DU FICHIER PDF ASSOCIE AU XML
+                        $filePDF = isiworkconnector::verifyPDFLinkedToXML($objXml, $TFilesPDF);
+
+                        if ($filePDF) {
+                            //ON CREE LA FACTURE
+                            $res = isiworkconnector::createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF);       //si le fichier pdf existe, on crée la facture
+
+                            if (empty($res)) {
+                                $error++;
+                                $this->errors[] = "Impossible de créer la facture depuis le fichier : " . $fileXML['name'];
+                            }
+
+                        } else {
+                            $error++;
+                            $this->errors[] = "Impossible de créer la facture " . $objXml->ref . " : PDF du fichier '" . $fileXML['name'] . "' introuvable";
+                        }
+
+                        //DEPLACEMENT FICHIERS XML ET PDF DANS LE DOSSIER "TRAITE"
+                        if (!$error) {
+                            //Dossier de destination
+                            $folder_dest = "Traité";
+                            //Liste des fichiers à transférer
+                            $TFiles = array();
+                            $TFiles[] = $filePDF['name'];
+                            $TFiles[] = $fileXML['name'];
+                            isiworkconnector::cleanFTPDirectory($TFiles, $folder_dest);
+                        }
+
+                    }
+
+                    //TYPE DE DOCUMENT INCONNU
+                    else {
+                        $error++;
+                        $this->errors[] = "Le type '" . $objXml->type . "' du document " . $fileXML['name'] . " est invalide";
+                    }
+
+                } else {
+                    $error++;
+                    $this->errors[] = "Erreur lors du chargement du fichier " . $fileXML['name'];
+                }
+            }
+        }
+
+        if($error) {                                                                            //CONNEXION FTP OUT
+            setEventMessages('', $this->errors, "errors");
+            return 0;
+        } else {
+            return 1;
+        }
+    }
+
+    public function FTPConnection (){
+
+        global $conf;
 
         $error = 0;
 
@@ -107,7 +136,6 @@ class isiworkconnector extends SeedObject
         $ftp_user = (empty($conf->global->IWCONNECTOR_FTP_USER)) ? "" : $conf->global->IWCONNECTOR_FTP_USER;
         $ftp_pass = (empty($conf->global->IWCONNECTOR_FTP_PASS)) ? "" : $conf->global->IWCONNECTOR_FTP_PASS;
         $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
-        $timeout = 120;
 
         if(empty($ftp_host)) {
             $error++;
@@ -137,69 +165,12 @@ class isiworkconnector extends SeedObject
         }
 
         //DOSSIER COURANT FTP
-        if(!$error) $res_dir = ftp_chdir($ftpc, $ftp_folder);
+        if(!empty($folder)) {
+            if (!$error) $res_dir = ftp_chdir($ftpc, $ftp_folder);
 
-        if(!$res_dir)
-        {
-            $error++;
-            $this->errors[] = "Erreur de répertoire ftp".$ftp_folder;
-        }
-
-        if(!$error){                                                                            //CONNEXION FTP OK
-
-            //LISTE DES FICHIERS ET DOSSIERS FTP
-            $TFile = isiworkconnector::get_FilesFTP();
-
-            $TFileXML = (empty($TFile['xml'])) ? array() : $TFile['xml'];  //liste des fichiers xml serveur ftp
-            $TFilePDF = (empty($TFile['pdf'])) ? array() : $TFile['pdf'];  //liste des fichiers pdf serveur ftp
-            $TDir = (empty($TFile['dir'])) ? array() : $TFile['dir'];  //liste des dossiers serveur ftp
-
-            //CREATION DOSSIER "TRAITE" SI IL N'EXISTE PAS
-            $TDirName = array();
-            if(!empty($TDir)){
-                foreach($TDir as $dir){
-                    $TDirName[] = $dir['name'];
-                }
-            }
-
-            if((!in_array("Traité", $TDirName))){
-                ftp_mkdir($ftpc, "Traité");
-            }
-
-            //TRAITEMENT DES FICHIERS XML
-            foreach ($TFileXML as $fileXML){
-
-                //OUVERTURE DU FICHIER XML SUR LE SERVEUR FTP
-                $ftp_file_path = $ftp_folder.$fileXML['name'];
-
-                $objXml = simplexml_load_file('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path);
-
-                //ON VERIFIE L'EXISTANCE DU FICHIER PDF ASSOCIE AU XML
-                $filePDF = isiworkconnector::verifyPDFLinkedToXML($objXml, $TFilePDF);
-
-                //TRAITEMENT FACTURE FOURNISSEUR
-                if($objXml->type == 'Facture fournisseur'){
-                    if($filePDF) {
-                        $res = isiworkconnector::createDolibarrInvoiceSupplier($objXml, $fileXML, $filePDF, $ftpc);       //si le fichier pdf existe, on crée la facture
-
-                        if(empty($res)){
-                            $error ++;
-                            $this->errors[] = "Impossible de créer la facture depuis le fichier : " . $fileXML['name'];
-                        }
-
-                    } else {
-                        $error ++;
-                        $this->errors[] = "Impossible de créer la facture " . $objXml->ref. " : PDF du fichier '" . $fileXML['name'] .  "' introuvable";
-                    }
-                } else {
-                    $error ++;
-                    $this->errors[] = "Le type '" . $objXml->type .  "' du document " . $fileXML['name'] . " est invalide";
-                }
-
-                //DEPLACEMENT FICHIERS XML ET PDF DANS LE DOSSIER "TRAITE"
-                if(!$error){
-                    isiworkconnector::cleanFTPDirectory($ftp_folder, $ftp_port, $ftp_host, $ftp_pass, $fileXML, $ftp_user,  $filePDF);
-                }
+            if (!$res_dir) {
+                $error++;
+                $this->errors[] = "Erreur de répertoire ftp" . $ftp_folder;
             }
         }
 
@@ -207,34 +178,51 @@ class isiworkconnector extends SeedObject
             setEventMessages('', $this->errors, "errors");
             return 0;
         } else {
-            return 1;
+            return $ftpc;
         }
+
     }
 
-    public function cleanFTPDirectory($ftp_folder, $ftp_port, $ftp_host, $ftp_pass, $fileXML, $ftp_user,  $filePDF){
+    public function cleanFTPDirectory($TFiles, $folder_dest = ''){
 
-        $ftp_file_path_dest = $ftp_folder.'/Traité/'.$fileXML['name'];
-        $ftp_file_path_xml = $ftp_folder.$fileXML['name'];
-        copy('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_xml, 'ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_dest);
-        unlink('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_xml);
+        global $conf;
 
-        $ftp_file_path_dest_pdf = $ftp_folder.'/Traité/'.$filePDF['name'];
-        $ftp_file_path_pdf = $ftp_folder.$filePDF['name'];
-        copy('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_pdf, 'ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_dest_pdf);
-        unlink('ftp://'.$ftp_user.':'.$ftp_pass.'@'.$ftp_host.':'.$ftp_port.$ftp_file_path_pdf);
+        $ftp_host = (empty($conf->global->IWCONNECTOR_FTP_HOST)) ? "" : $conf->global->IWCONNECTOR_FTP_HOST;
+        $ftp_port = (empty($conf->global->IWCONNECTOR_FTP_PORT)) ? 21 : $conf->global->IWCONNECTOR_FTP_PORT;
+        $ftp_user = (empty($conf->global->IWCONNECTOR_FTP_USER)) ? "" : $conf->global->IWCONNECTOR_FTP_USER;
+        $ftp_pass = (empty($conf->global->IWCONNECTOR_FTP_PASS)) ? "" : $conf->global->IWCONNECTOR_FTP_PASS;
+        $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
+
+        if(!empty($folder_dest)) {
+
+            foreach($TFiles as $file){
+                $ftp_file_path_dest = $ftp_folder . '/'. $folder_dest .'/' . $file;
+                $ftp_file_path = $ftp_folder . $file;
+                copy('ftp://' . $ftp_user . ':' . $ftp_pass . '@' . $ftp_host . ':' . $ftp_port . $ftp_file_path, 'ftp://' . $ftp_user . ':' . $ftp_pass . '@' . $ftp_host . ':' . $ftp_port . $ftp_file_path_dest);
+                unlink('ftp://' . $ftp_user . ':' . $ftp_pass . '@' . $ftp_host . ':' . $ftp_port . $ftp_file_path);
+            }
+        }
+
+        else {
+
+            foreach($TFiles as $file){
+                $ftp_file_path = $ftp_folder . $file;
+                unlink('ftp://' . $ftp_user . ':' . $ftp_pass . '@' . $ftp_host . ':' . $ftp_port . $ftp_file_path);
+            }
+        }
     }
 
     /**
      *    Création d'une facture fournisseur à partir d'un fichier XML FTP donné
      *
-     *    @param      object                objet XML
+     *    @param      FTP Buffer            connexion ftp vers les fichiers concernés
+     *                object                objet XML
      *                string                fichier XML
      *                string                fichier PDF
-     *                FTP Buffer            connexion ftp vers les fichiers concernés
      *    @return     int    	     		1 si OK, < 0 si KO, 0 si création OK mais erreurs
      */
 
-    public function createDolibarrInvoiceSupplier($objXml, $fileXML, $filePDF, $ftpc){
+    public function createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF){
 
         global $db, $user, $conf;
 
@@ -278,7 +266,7 @@ class isiworkconnector extends SeedObject
 
         //VERIFICATION DES PRODUITS/SERVICES
         if ($objXml->lines) {
-            $TSupplierProduct = array();
+            $TSupplierProducts = array();
             foreach ($objXml->lines as $item) {
                 foreach ($item as $line) {
                     //id produit
@@ -288,8 +276,8 @@ class isiworkconnector extends SeedObject
 
                     if($db->num_rows($resql) == 1) {
                         $product = $db->fetch_object($resql);
-                        $TSupplierProduct[$refProduct]['id'] = $product->rowid;
-                        $TSupplierProduct[$refProduct]['type'] = $product->fk_product_type;
+                        $TSupplierProducts[$refProduct]['id'] = $product->rowid;
+                        $TSupplierProducts[$refProduct]['type'] = $product->fk_product_type;
                     } else {
                         if ($db->num_rows($resql) == 0) {
                             $error++;
@@ -356,8 +344,8 @@ class isiworkconnector extends SeedObject
 
         if(!$error) {
 
-            if ($TSupplierProduct){
-                foreach ($TSupplierProduct as $product) {
+            if ($TSupplierProducts){
+                foreach ($TSupplierProducts as $product) {
 
 
                         //id produit
@@ -417,13 +405,15 @@ class isiworkconnector extends SeedObject
 
     }
 
-    public function verifyPDFLinkedToXML($objXml, $TFilePDF){
+    public function verifyPDFLinkedToXML($objXml, $TFilesPDF){
 
         if(!empty($objXml->DocPath)) {
+            //ON RECUPERE LE NOM DU FICHIER PDF LIE AU XML
             $PDFlinkedtoXML = str_replace("\\", "/", $objXml->DocPath->__toString());
             $PDFlinkedtoXML =  basename($PDFlinkedtoXML);
 
-            foreach ($TFilePDF as $filePDF) {
+            //ON VERIFIE SI LE FICHIER LIE AU XML EXISTE DANS LES PDF DU SERVEUR FTP
+            foreach ($TFilesPDF as $filePDF) {
                 if ($PDFlinkedtoXML == $filePDF['name']){
                     return $filePDF;
                 }
@@ -439,10 +429,8 @@ class isiworkconnector extends SeedObject
 
     public function get_nb_XMLFilesFTP(){
 
-        $TFilesXML = array();
-
-        $res = $this->get_FilesFTP();
-        $TFilesXML = $res['xml'];
+        $TFiles = $this->get_FilesFTP();
+        $TFilesXML = $TFiles['xml'];
 
         if(is_array($TFilesXML)) {
             return count($TFilesXML);
@@ -461,168 +449,31 @@ class isiworkconnector extends SeedObject
         require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
         require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 
-        $error = 0;
+        $ftpc = isiworkconnector::FTPConnection();
 
-        //INFORMATIONS FTP
-        $ftp_host = (empty($conf->global->IWCONNECTOR_FTP_HOST)) ? "" : $conf->global->IWCONNECTOR_FTP_HOST;
-        $ftp_port = (empty($conf->global->IWCONNECTOR_FTP_PORT)) ? 21 : $conf->global->IWCONNECTOR_FTP_PORT;
-        $ftp_user = (empty($conf->global->IWCONNECTOR_FTP_USER)) ? "" : $conf->global->IWCONNECTOR_FTP_USER;
-        $ftp_pass = (empty($conf->global->IWCONNECTOR_FTP_PASS)) ? "" : $conf->global->IWCONNECTOR_FTP_PASS;
-        $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
-        $timeout = 120;
-
-        if(empty($ftp_host)) {
-            $error++;
-            $this->errors[] = "Information de connection FTP invalide : hôte non-défini";
-        }
-
-        //CONNEXION FTP
-        if(!$error) $ftpc = ftp_connect($ftp_host, $ftp_port);
-
-        if(!$ftpc){
-            $error++;
-            $this->errors[] = "Erreur de connection ftp";
-        }
-
-        //AUTHENTIFICATION FTP
-        if(!$error) $res_log = ftp_login($ftpc, $ftp_user, $ftp_pass);
-
-        if(!$res_log){
-            $error++;
-            $this->errors[] = "Erreur de login ftp";
-        }
-
-        //MODE PASSIF FTP
-        if (!empty($conf->global->IWCONNECTOR_FTP_PASSIVE_MODE))
-        {
-            ftp_pasv($ftpc, true);
-        }
-
-        //DOSSIER COURANT FTP
-        if(!$error) $res_dir = ftp_chdir($ftpc, $ftp_folder);
-
-        if(!$res_dir)
-        {
-            $error++;
-            $this->errors[] = "Erreur de répertoire ftp".$ftp_folder;
-        }
-
-        if(!$error){                                                                                //CONNEXION FTP OK
+        if(!empty($ftpc)){                                                                                //CONNEXION FTP OK
 
             //LISTE FICHIERS SUR LE SERVEUR FTP
-            $TFileFTP = ftp_mlsd($ftpc,ftp_pwd($ftpc));
+            $TFilesFTP = ftp_mlsd($ftpc,ftp_pwd($ftpc));
 
             //LISTE DES FICHIERS FTP PAR TYPE
-            $TFile = array();
-            foreach ($TFileFTP as $file){
+            $TFiles = array();
+            foreach ($TFilesFTP as $file){
                 if($file['name'] != "." && $file['name'] != ".." && $file['type'] == "file" ) {
                     $filetype = pathinfo($file['name'], PATHINFO_EXTENSION);                //on récupère l'extension des fichiers
                     if($filetype == "xml") {
-                        $TFile['xml'][] = $file;
+                        $TFiles['xml'][] = $file;
                     } elseif($filetype == "pdf") {
-                        $TFile['pdf'][] = $file;
+                        $TFiles['pdf'][] = $file;
                     }
                 } elseif($file['type'] == "dir"){
-                    $TFile['dir'][] = $file;
+                    $TFiles['dir'][] = $file;
                 }
             }
-            return $TFile;
+            return $TFiles;
         } else {                                                                                    //CONNEXION FTP OUT
-            setEventMessages('', $this->errors[0], "errors");
             return 0;
         }
     }
-
-    /**
-     * @param int    $withpicto     Add picto into link
-     * @param string $moreparams    Add more parameters in the URL
-     * @return string
-     */
-    public function getNomUrl($withpicto = 0, $moreparams = '')
-    {
-		global $langs;
-
-        $result='';
-        $label = '<u>' . $langs->trans("Showisiworkconnector") . '</u>';
-        if (! empty($this->ref)) $label.= '<br><b>'.$langs->trans('Ref').':</b> '.$this->ref;
-
-        $linkclose = '" title="'.dol_escape_htmltag($label, 1).'" class="classfortooltip">';
-        $link = '<a href="'.dol_buildpath('/isiworkconnector/card.php', 1).'?id='.$this->id.urlencode($moreparams).$linkclose;
-
-        $linkend='</a>';
-
-        $picto='generic';
-//        $picto='isiworkconnector@isiworkconnector';
-
-        if ($withpicto) $result.=($link.img_object($label, $picto, 'class="classfortooltip"').$linkend);
-        if ($withpicto && $withpicto != 2) $result.=' ';
-
-        $result.=$link.$this->ref.$linkend;
-
-        return $result;
-    }
-
-    /**
-     * @param int       $id             Identifiant
-     * @param null      $ref            Ref
-     * @param int       $withpicto      Add picto into link
-     * @param string    $moreparams     Add more parameters in the URL
-     * @return string
-     */
-    public static function getStaticNomUrl($id, $ref = null, $withpicto = 0, $moreparams = '')
-    {
-		global $db;
-
-		$object = new isiworkconnector($db);
-		$object->fetch($id, false, $ref);
-
-		return $object->getNomUrl($withpicto, $moreparams);
-    }
-
-
-//    /**
-//     * @param int $mode     0=Long label, 1=Short label, 2=Picto + Short label, 3=Picto, 4=Picto + Long label, 5=Short label + Picto, 6=Long label + Picto
-//     * @return string
-//     */
-//    public function getLibStatut($mode = 0)
-//    {
-//        return self::LibStatut($this->status, $mode);
-//    }
-//
-//    /**
-//     * @param int       $status   Status
-//     * @param int       $mode     0=Long label, 1=Short label, 2=Picto + Short label, 3=Picto, 4=Picto + Long label, 5=Short label + Picto, 6=Long label + Picto
-//     * @return string
-//     */
-//    public static function LibStatut($status, $mode)
-//    {
-//		global $langs;
-//
-//		$langs->load('isiworkconnector@isiworkconnector');
-//        $res = '';
-//
-//        if ($status==self::STATUS_CANCELED) { $statusType='status9'; $statusLabel=$langs->trans('isiworkconnectorStatusCancel'); $statusLabelShort=$langs->trans('isiworkconnectorStatusShortCancel'); }
-//        elseif ($status==self::STATUS_DRAFT) { $statusType='status0'; $statusLabel=$langs->trans('isiworkconnectorStatusDraft'); $statusLabelShort=$langs->trans('isiworkconnectorStatusShortDraft'); }
-//        elseif ($status==self::STATUS_VALIDATED) { $statusType='status1'; $statusLabel=$langs->trans('isiworkconnectorStatusValidated'); $statusLabelShort=$langs->trans('isiworkconnectorStatusShortValidate'); }
-//        elseif ($status==self::STATUS_REFUSED) { $statusType='status5'; $statusLabel=$langs->trans('isiworkconnectorStatusRefused'); $statusLabelShort=$langs->trans('isiworkconnectorStatusShortRefused'); }
-//        elseif ($status==self::STATUS_ACCEPTED) { $statusType='status6'; $statusLabel=$langs->trans('isiworkconnectorStatusAccepted'); $statusLabelShort=$langs->trans('isiworkconnectorStatusShortAccepted'); }
-//
-//        if (function_exists('dolGetStatus'))
-//        {
-//            $res = dolGetStatus($statusLabel, $statusLabelShort, '', $statusType, $mode);
-//        }
-//        else
-//        {
-//            if ($mode == 0) $res = $statusLabel;
-//            elseif ($mode == 1) $res = $statusLabelShort;
-//            elseif ($mode == 2) $res = img_picto($statusLabel, $statusType).$statusLabelShort;
-//            elseif ($mode == 3) $res = img_picto($statusLabel, $statusType);
-//            elseif ($mode == 4) $res = img_picto($statusLabel, $statusType).$statusLabel;
-//            elseif ($mode == 5) $res = $statusLabelShort.img_picto($statusLabel, $statusType);
-//            elseif ($mode == 6) $res = $statusLabel.img_picto($statusLabel, $statusType);
-//        }
-//
-//        return $res;
-//    }
 
 }
