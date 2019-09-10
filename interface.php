@@ -25,7 +25,6 @@ if (empty($reshook))
     $error = 0;
     switch ($action) {
         case 'process':
-            //TO DO : import FTP server files
             $object->runImportFiles();
             header('Location: ' . dol_buildpath('/isiworkconnector/interface.php', 1));
             exit;

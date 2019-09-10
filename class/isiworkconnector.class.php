@@ -69,7 +69,7 @@ class isiworkconnector extends SeedObject
 
                 //OUVERTURE DU FICHIER XML SUR LE SERVEUR FTP
                 $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
-                $ftp_file_path = $ftp_folder.$fileXML['name'];
+                $ftp_file_path = $ftp_folder.$fileXML;
 
                 $objXml = simplexml_load_file('ftp://'.$conf->global->IWCONNECTOR_FTP_USER.':'.$conf->global->IWCONNECTOR_FTP_PASS.'@'.$conf->global->IWCONNECTOR_FTP_HOST.':'.$conf->global->IWCONNECTOR_FTP_PORT.$ftp_file_path);
 
@@ -87,12 +87,12 @@ class isiworkconnector extends SeedObject
 
                             if (empty($res)) {
                                 $error++;
-                                $this->errors[] = "Impossible de créer la facture depuis le fichier : " . $fileXML['name'];
+                                $this->errors[] = "Impossible de créer la facture depuis le fichier : " . $fileXML;
                             }
 
                         } else {
                             $error++;
-                            $this->errors[] = "Impossible de créer la facture " . $objXml->ref . " : PDF du fichier '" . $fileXML['name'] . "' introuvable";
+                            $this->errors[] = "Impossible de créer la facture " . $objXml->ref . " : PDF du fichier '" . $fileXML . "' introuvable";
                         }
 
                         //DEPLACEMENT FICHIERS XML ET PDF DANS LE DOSSIER "TRAITE"
@@ -101,8 +101,8 @@ class isiworkconnector extends SeedObject
                             $folder_dest = "Traité";
                             //Liste des fichiers à transférer
                             $TFiles = array();
-                            $TFiles[] = $filePDF['name'];
-                            $TFiles[] = $fileXML['name'];
+                            $TFiles[] = $filePDF;
+                            $TFiles[] = $fileXML;
                             isiworkconnector::cleanFTPDirectory($TFiles, $folder_dest);
                         }
 
@@ -316,7 +316,7 @@ class isiworkconnector extends SeedObject
                 $supplierInvoice->fetch($supplierInvoiceID);
 
                 //REFERENCE EXTERNE
-                $supplierInvoice->update_ref_ext($fileXML['name']);
+                $supplierInvoice->update_ref_ext($fileXML);
 
                 //ON JOINT LE FICHIER PDF ET XML A LA FACTURE
                 $ref = dol_sanitizeFileName($supplierInvoice->ref);
@@ -325,8 +325,8 @@ class isiworkconnector extends SeedObject
                     dol_mkdir($local_dir);
                 }
 
-                $remote_file_pdf = $filePDF['name'];
-                $remote_file_xml = $fileXML['name'];
+                $remote_file_pdf = $filePDF;
+                $remote_file_xml = $fileXML;
 
                 $local_file_pdf = $local_dir . '/' . $remote_file_pdf;
                 $local_file_xml = $local_dir . '/' . $remote_file_xml;
@@ -421,7 +421,7 @@ class isiworkconnector extends SeedObject
 
             //ON VERIFIE SI LE FICHIER LIE AU XML EXISTE DANS LES PDF DU SERVEUR FTP
             foreach ($TFilesPDF as $filePDF) {
-                if ($PDFlinkedtoXML == $filePDF['name']){
+                if ($PDFlinkedtoXML == $filePDF){
                     return $filePDF;
                 }
             }
@@ -437,10 +437,9 @@ class isiworkconnector extends SeedObject
     public function get_nb_XMLFilesFTP(){
 
         $TFiles = $this->get_FilesFTP();
-        $TFilesXML = $TFiles['xml'];
 
-        if(is_array($TFilesXML)) {
-            return count($TFilesXML);
+        if(!empty($TFiles['xml'])) {
+            return count($TFiles['xml']);
         } else {
             return 0;
         }
@@ -461,23 +460,25 @@ class isiworkconnector extends SeedObject
         if(!empty($ftpc)){
 
             //CONNEXION FTP OK
-            $TFilesFTP = ftp_mlsd($ftpc,ftp_pwd($ftpc));
+            $TFilesFTP = ftp_nlist($ftpc,ftp_pwd($ftpc));
 
             //LISTE DES FICHIERS FTP PAR TYPE
             if(!empty($TFilesFTP)) {
                 $TFiles = array();
-                foreach ($TFilesFTP as $file) {
-                    if ($file['name'] != "." && $file['name'] != ".." && $file['type'] == "file") {
-                        $filetype = pathinfo($file['name'], PATHINFO_EXTENSION);                //on récupère l'extension des fichiers
-                        if ($filetype == "xml") {
-                            $TFiles['xml'][] = $file;
-                        } elseif ($filetype == "pdf") {
-                            $TFiles['pdf'][] = $file;
-                        }
-                    } elseif ($file['type'] == "dir") {
+                foreach ($TFilesFTP as $filePath) {
+                    str_replace("\\", "/", $filePath);
+                    $file = basename($filePath);
+
+                    $filetype = pathinfo($file, PATHINFO_EXTENSION);                //on récupère l'extension des fichiers
+                    if ($filetype == "xml") {
+                        $TFiles['xml'][] = $file;
+                    } elseif ($filetype == "pdf") {
+                        $TFiles['pdf'][] = $file;
+                    } elseif ($filetype == "") {
                         $TFiles['dir'][] = $file;
                     }
                 }
+
                 return $TFiles;
             }
         } else {                                                                                    //CONNEXION FTP OUT
