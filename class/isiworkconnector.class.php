@@ -28,6 +28,11 @@ if (!class_exists('SeedObject'))
 class isiworkconnector extends SeedObject
 {
 
+    public function __construct(DoliDB &$db)
+    {
+        parent::__construct($db);
+    }
+
     public function runImportFiles(){
         global $conf;
 
