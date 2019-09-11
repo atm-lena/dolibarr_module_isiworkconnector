@@ -470,9 +470,9 @@ class isiworkconnector extends SeedObject
      * Nombre de fichiers XML en attente dans le serveur ftp
      */
 
-    public function get_nb_XMLFilesFTP(){
+    public function get_nb_XMLFilesFTP($ftpc){
 
-        $TFiles = $this->get_FilesFTP();
+        $TFiles = $this->get_FilesFTP($ftpc);
 
         if(!empty($TFiles['xml'])) {
             return count($TFiles['xml']);

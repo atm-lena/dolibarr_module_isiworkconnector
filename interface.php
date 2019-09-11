@@ -42,7 +42,8 @@ if (empty($reshook))
             exit;
 
         default :
-            $nb_waitingfiles = $object->get_nb_XMLFilesFTP();
+            $ftpc=$object->FTPConnection();
+            $nb_waitingfiles = $object->get_nb_XMLFilesFTP($ftpc);
     }
 }
 
