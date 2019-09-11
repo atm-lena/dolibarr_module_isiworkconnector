@@ -36,14 +36,15 @@ class isiworkconnector extends SeedObject
     /**
      * Importe les fichiers ISIWork du serveur FTP
      *
-     * @return array    Fichiers traités "OK" et fichiers "KO"
+     * @return array   id/nom objet OK et nom fichiers "KO"
      */
 
-    public function runImportFiles (){
+    public function runImportFiles ($auto_validate_supplier_invoice = ''){
         global $conf;
 
         require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
         require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+        require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
 
         $error = 0;
         $TFilesImported= array();
@@ -54,7 +55,7 @@ class isiworkconnector extends SeedObject
         if(!empty($ftpc)){                                                                            //CONNEXION FTP OK
 
             //LISTE DES FICHIERS XML / PDF ET DOSSIERS SUR LE FTP
-            $TFiles = isiworkconnector::get_FilesFTP();
+            $TFiles = isiworkconnector::get_FilesFTP($ftpc);
 
             $TFilesXML = (empty($TFiles['xml'])) ? array() : $TFiles['xml'];  //liste des fichiers xml serveur ftp
             $TFilesPDF = (empty($TFiles['pdf'])) ? array() : $TFiles['pdf'];  //liste des fichiers pdf serveur ftp
@@ -86,11 +87,14 @@ class isiworkconnector extends SeedObject
                     if ($objXml->type == 'Facture fournisseur') {
 
                         //ON VERIFIE L'EXISTENCE DU FICHIER PDF ASSOCIE AU XML
-                        $filePDF = isiworkconnector::verifyPDFLinkedToXML($objXml, $TFilesPDF);
+                        $PDFlinkedtoXML = str_replace("\\", "/", $objXml->DocPath->__toString());
+                        $PDFlinkedtoXML =  basename($PDFlinkedtoXML);
+
+                        $filePDF = isiworkconnector::verifyPDFLinkedToXML($PDFlinkedtoXML , $TFilesPDF);
 
                         if ($filePDF) {
                             //ON CREE LA FACTURE
-                            $res = isiworkconnector::createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF);       //si le fichier pdf existe, on crée la facture
+                            $res = isiworkconnector::createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF, $auto_validate_supplier_invoice);       //si le fichier pdf existe, on crée la facture
 
                         } else {
                             $error++;
@@ -109,11 +113,17 @@ class isiworkconnector extends SeedObject
 
                             isiworkconnector::cleanFTPDirectory($TFiles, $folder_dest);
 
-                            //ON AJOUTE LE FICHIER XML AUX FICHIERS TRAITES
-                            $TFilesImported['OK']['FactureFourn'][] = $fileXML;
+                            //ON AJOUTE LA FACTURE (ID ET REF) A OK DANS LE TABLEAU RETOURNE PAR LA FONCTION
+                            $id_supplierInvoice = $res;
+                            $supplierInvoice = new FactureFournisseur($this->db);
+                            $supplierInvoice->fetch($id_supplierInvoice);
+                            $TFilesImported['OK']['FactureFourn'][$id_supplierInvoice] = $supplierInvoice->ref ;
 
-                        } else {
-                            //ON AJOUTE LE FICHIER XML AUX FICHIERS KO
+                        }
+
+                        //FACTURE NON CREE
+                        else {
+                            //ON AJOUTE LE NOM DU FICHIER XML AUX FICHIERS KO
                             $TFilesImported['KO'][] = $fileXML;
                         }
                     }
@@ -122,13 +132,16 @@ class isiworkconnector extends SeedObject
                     else {
                         $error++;
                         $this->errors[] = "Le type '" . $objXml->type . "' du document " . $fileXML . " est invalide";
+
+                        //ON AJOUTE LE  NOM FICHIER XML AUX FICHIERS KO
+                        $TFilesImported['KO'][] = $fileXML;
                     }
 
                 } else {
                     $error++;
                     $this->errors[] = "Erreur lors du chargement du fichier " . $fileXML;
 
-                    //ON AJOUTE LE FICHIER XML AUX FICHIERS KO
+                    //ON AJOUTE LE  NOM FICHIER XML AUX FICHIERS KO
                     $TFilesImported['KO'][] = $fileXML;
                 }
             }
@@ -226,6 +239,7 @@ class isiworkconnector extends SeedObject
         $ftp_pass = (empty($conf->global->IWCONNECTOR_FTP_PASS)) ? "" : $conf->global->IWCONNECTOR_FTP_PASS;
         $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
 
+        //SI IL Y A UN FICHIER DE DESTINATION ON DEPLACE
         if(!empty($folder_dest)) {
             foreach($TFiles as $file){
                 $ftp_file_path_dest = $ftp_folder . '/'. $folder_dest .'/' . $file;
@@ -235,6 +249,7 @@ class isiworkconnector extends SeedObject
             }
         }
 
+        //SI IL N'Y A PAS DE FICHIER DE DESTINATION, ON SUPPRIME SIMPLEMENT LES FICHIERS
         else {
             foreach($TFiles as $file){
                 $ftp_file_path = $ftp_folder . $file;
@@ -254,7 +269,7 @@ class isiworkconnector extends SeedObject
      * @return int                  1 si facture crée, 0 si erreur
      */
 
-    public function createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF){
+    public function createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF, $auto_validate = ''){
 
         global $user, $conf;
 
@@ -263,7 +278,7 @@ class isiworkconnector extends SeedObject
 
         $error = 0;
 
-        //on crée un nouvel objet facture
+        //ON CREE UNE NOUVELLE FACTURE FOURNISSEUR
         $supplierInvoice = new FactureFournisseur($this->db);
 
         //ON RENSEIGNE LES INFORMATIONS OBLIGATOIRES POUR UNE FACTURE
@@ -276,12 +291,15 @@ class isiworkconnector extends SeedObject
                 $this->errors[] = 'Impossible de créer la facture : la référence "' . $objXml->ref . '" existe déjà';
             }
 
-            //on vérifie si le fournisseur existe
+            //on vérifie si le fournisseur existe ou si il en existe plusieur et qu'on n'arrive pas à déterminer quel est le bon
             $sql = 'SELECT * FROM ' .MAIN_DB_PREFIX. 'societe WHERE code_fournisseur IS NOT NULL AND nom = "'. $objXml->fournisseur . '";';
             $resql = $this->db->query($sql);
-            if(!($this->db->num_rows($resql)) || $this->db->num_rows($resql) > 1){
+            if(!($this->db->num_rows($resql))){
                 $error++;
                 $this->errors[] = 'Impossible de créer la facture : le fournisseur "' .$objXml->fournisseur. '" n\'existe pas';
+            } elseif ($this->db->num_rows($resql) > 1){
+                $error++;
+                $this->errors[] = 'Impossible de créer la facture : plusieurs fournisseurs au nom de "' .$objXml->fournisseur. '" existent';
             } else {
                 $supplier = $this->db->fetch_object($resql);
                 $supplierInvoice->socid = $supplier->rowid;
@@ -301,15 +319,15 @@ class isiworkconnector extends SeedObject
             $TSupplierProducts = array();
             foreach ($objXml->lines as $item) {
                 foreach ($item as $line) {
-                    //id produit
+                    //id produit en fonction de la ref donnée
                     $refProduct = $line->ref->__toString();
                     $sql = 'SELECT * FROM llx_product WHERE ref = "' . $refProduct . '"';
                     $resql = $this->db->query($sql);
 
                     if($this->db->num_rows($resql) == 1) {
                         $product = $this->db->fetch_object($resql);
-                        $TSupplierProducts[$refProduct]['id'] = $product->rowid;
-                        $TSupplierProducts[$refProduct]['type'] = $product->fk_product_type;
+                        $TSupplierProducts[$refProduct]['id'] = $product->rowid;                    //id du produit
+                        $TSupplierProducts[$refProduct]['type'] = $product->fk_product_type;        //type du produit (produit ou service)
                     } else {
                         if ($this->db->num_rows($resql) == 0) {
                             $error++;
@@ -317,7 +335,7 @@ class isiworkconnector extends SeedObject
                             continue;
                         } elseif ($this->db->num_rows($resql) > 1) {
                             $error++;
-                            $this->errors[] = 'Impossible de déterminer le produit correspondant : ' . $refProduct;
+                            $this->errors[] = 'Plusieurs produits existants : ref ' . $refProduct;
                             continue;
                         }
                     }
@@ -329,105 +347,102 @@ class isiworkconnector extends SeedObject
         //DONNEES OBLIGATOIRES OK ET PRODUITS/SERVICES OK : CREATION FACTURE
         if(!$error){
 
-            //RAJOUT DONNEES NON OBLIGATOIRE
+            //RAJOUT DONNEES NON OBLIGATOIRES
             if(!empty($objXml->date_echeance)){
                 $supplierInvoice->date_echeance = strftime('%Y-%m-%d',strtotime($objXml->date_echeance));
             }
 
-            //CREATION DE LA FACTURE ET SES PIECES JOINTES
-            $supplierInvoiceID = $supplierInvoice->create($user);
+            //CREATION DE LA FACTURE
+            $id_supplierInvoice = $supplierInvoice->create($user);
 
-                //ON RECUPERE LA FACTURE CREE
-                $supplierInvoice->fetch($supplierInvoiceID);
+            //ON RECUPERE LA FACTURE CREE
+            $supplierInvoice->fetch($id_supplierInvoice);
 
-                //REFERENCE EXTERNE
-                $supplierInvoice->update_ref_ext($fileXML);
+            //REFERENCE EXTERNE : NOM DU FICHIER XML SOURCE
+            $supplierInvoice->update_ref_ext($fileXML);
 
-                //ON JOINT LE FICHIER PDF ET XML A LA FACTURE
-                $ref = dol_sanitizeFileName($supplierInvoice->ref);
-                $local_dir = $conf->fournisseur->facture->dir_output . '/' . get_exdir($supplierInvoice->id, 2, 0, 0, $supplierInvoice, 'invoice_supplier') . $ref;
-                if (!dol_is_dir($local_dir)) {
-                    dol_mkdir($local_dir);
-                }
+            //ON JOINT LE FICHIER PDF ET XML A LA FACTURE
+            $ref = dol_sanitizeFileName($supplierInvoice->ref);
+            $local_dir = $conf->fournisseur->facture->dir_output . '/' . get_exdir($supplierInvoice->id, 2, 0, 0, $supplierInvoice, 'invoice_supplier') . $ref;
+            if (!dol_is_dir($local_dir)) {
+                dol_mkdir($local_dir);
+            }
 
-                $remote_file_pdf = $filePDF;
-                $remote_file_xml = $fileXML;
+            $remote_file_pdf = $filePDF;
+            $remote_file_xml = $fileXML;
 
-                $local_file_pdf = $local_dir . '/' . $remote_file_pdf;
-                $local_file_xml = $local_dir . '/' . $remote_file_xml;
+            $local_file_pdf = $local_dir . '/' . $remote_file_pdf;
+            $local_file_xml = $local_dir . '/' . $remote_file_xml;
 
-                $res = ftp_get($ftpc, $local_file_pdf, $remote_file_pdf, FTP_ASCII);
-                if(!$res){
-                    $error++;
-                    $this->errors[] = 'Fichier pdf non joint';
-                }
+            $res = ftp_get($ftpc, $local_file_pdf, $remote_file_pdf, FTP_ASCII);
+            if(!$res){
+                $error++;
+                $this->errors[] = 'Fichier pdf non joint : ' . $supplierInvoice->ref;
+            }
 
-                $res = ftp_get($ftpc, $local_file_xml, $remote_file_xml, FTP_ASCII);
-                if(!$res){
-                    $error++;
-                    $this->errors[] = 'Fichier xml non joint';
-                }
-        }
+            $res = ftp_get($ftpc, $local_file_xml, $remote_file_xml, FTP_ASCII);
+            if(!$res){
+                $error++;
+                $this->errors[] = 'Fichier xml non joint : ' . $supplierInvoice->ref;
+            }
 
-        if(!$error) {
-
+            //ON AJOUTE LES LIGNES DE LA FACTURE
             if ($TSupplierProducts){
                 foreach ($TSupplierProducts as $product) {
 
+                    //id produit
+                    $idProduct = $product['id'];
 
-                        //id produit
-                        $idProduct = $product['id'];
+                    //type produit
+                    $typeProduct = $product['type'];
 
-                        //type produit
-                        $typeProduct = $product['type'];
+                    //quantité
+                    $qty = $line->qty->__toString();
 
-                        //quantité
-                        $qty = $line->qty->__toString();
+                    //réduction
+                    $remise_percent = $line->remise_percent->__toString();
 
-                        //réduction
-                        $remise_percent = $line->remise_percent->__toString();
+                    //description
+                    $description = $line->description->__toString();
 
-                        //description
-                        $description = $line->description->__toString();
+                    //prix unitaire ht
+                    $pu_ht = $line->pu_ht->__toString();
 
-                        //prix unitaire ht
-                        $pu_ht = $line->pu_ht->__toString();
+                    //taux de tva
+                    $tva_tx = $line->tva_tx->__toString();
 
-                        //taux de tva
-                        $tva_tx = $line->tva_tx->__toString();
+                    if (!$error) {
+                        //ajout ligne
+                        $supplierInvoice->addline(
+                            '',
+                            $pu_ht,
+                            $tva_tx,
+                            '',
+                            '',
+                            $qty,
+                            $idProduct,
+                            $remise_percent,
+                            '',
+                            '',
+                            '',
+                            '',
+                            'HT',
+                            $typeProduct);
 
-                        if (!$error) {
-                            //ajout ligne
-                            $supplierInvoice->addline(
-                                '',
-                                $pu_ht,
-                                $tva_tx,
-                                '',
-                                '',
-                                $qty,
-                                $idProduct,
-                                $remise_percent,
-                                '',
-                                '',
-                                '',
-                                '',
-                                'HT',
-                                $typeProduct);
-
-                        }
+                    }
                 }
             }
         }
 
-        //VALIDATION FACTURE
-        if(!$error){
+        //ON VALIDE LA FACTURE
+        if(!$error && !empty($auto_validate)){
             $supplierInvoice->validate($user, $objXml->ref->__toString());
         }
 
-        if($error) {                                                                            //CONNEXION FTP OUT
+        if($error) {
             return 0;
         } else {
-            return 1;
+            return $supplierInvoice->id;
         }
 
     }
@@ -435,25 +450,19 @@ class isiworkconnector extends SeedObject
     /**
      * Vérifie si le PDF lié à l'objet XML existe
      *
-     * @param $objXml
+     * @param $PDFlinkedtoXM
      * @param $TFilesPDF
      * @return int 0 si le PDF n'existe pas, string nom du fichier PDF si le PDF existe
      */
 
-    public function verifyPDFLinkedToXML($objXml, $TFilesPDF){
+    public function verifyPDFLinkedToXML($PDFlinkedtoXML, $TFilesPDF){
 
-        if(!empty($objXml->DocPath)) {
-            //ON RECUPERE LE NOM DU FICHIER PDF LIE AU XML
-            $PDFlinkedtoXML = str_replace("\\", "/", $objXml->DocPath->__toString());
-            $PDFlinkedtoXML =  basename($PDFlinkedtoXML);
-
-            //ON VERIFIE SI LE FICHIER LIE AU XML EXISTE DANS LES PDF DU SERVEUR FTP
-            foreach ($TFilesPDF as $filePDF) {
-                if ($PDFlinkedtoXML == $filePDF){
-                    return $filePDF;
-                }
+        foreach ($TFilesPDF as $filePDF) {
+            if ($PDFlinkedtoXML == $filePDF){
+                return $filePDF;
             }
         }
+
         return 0;
     }
 
@@ -473,42 +482,44 @@ class isiworkconnector extends SeedObject
     }
 
     /**
-     *  Retourne la liste des fichiers XML du serveur ftp par type
+     *  Retourne la liste des fichiers du serveur ftp par type
      */
 
-    public function get_FilesFTP (){
+    public function get_FilesFTP($ftpc){
         global $conf;
 
         require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
         require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 
-        $ftpc = isiworkconnector::FTPConnection();
 
-        if(!empty($ftpc)){
+        //LISTE DES FICHIERS SUR LE SERVEUR FTP
+        $TFilesFTP = ftp_nlist($ftpc,ftp_pwd($ftpc));
 
-            //CONNEXION FTP OK
-            $TFilesFTP = ftp_nlist($ftpc,ftp_pwd($ftpc));
+        if($TFilesFTP){
 
-            //LISTE DES FICHIERS FTP PAR TYPE
-            if(!empty($TFilesFTP)) {
-                $TFiles = array();
-                foreach ($TFilesFTP as $filePath) {
-                    str_replace("\\", "/", $filePath);
-                    $file = basename($filePath);
+            $TFiles = array();
 
-                    $filetype = pathinfo($file, PATHINFO_EXTENSION);                //on récupère l'extension des fichiers
-                    if ($filetype == "xml") {
-                        $TFiles['xml'][] = $file;
-                    } elseif ($filetype == "pdf") {
-                        $TFiles['pdf'][] = $file;
-                    } elseif ($filetype == "") {
-                        $TFiles['dir'][] = $file;
-                    }
+            foreach ($TFilesFTP as $filePath) {
+
+                //ON RECUPERE LE NOM DU FICHIER
+                str_replace("\\", "/", $filePath);
+                $file = basename($filePath);
+
+                //ON RECUPERE L'EXTENSION DU FICHIER
+                $filetype = pathinfo($file, PATHINFO_EXTENSION);
+
+                if ($filetype == "xml") {
+                    $TFiles['xml'][] = $file;
+                } elseif ($filetype == "pdf") {
+                    $TFiles['pdf'][] = $file;
+                } elseif ($filetype == "") {
+                    $TFiles['dir'][] = $file;
                 }
-
-                return $TFiles;
             }
-        } else {                                                                                    //CONNEXION FTP OUT
+
+            return $TFiles;
+
+        } else {
             return 0;
         }
     }

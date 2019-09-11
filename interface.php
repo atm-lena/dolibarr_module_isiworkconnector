@@ -5,10 +5,10 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/functions.lib.php';
 dol_include_once('isiworkconnector/class/isiworkconnector.class.php');
 dol_include_once('isiworkconnector/lib/isiworkconnector.lib.php');
 
-$action = GETPOST('action');
-
 $object = new isiworkconnector($db);
 
+$action = GETPOST('action');
+$id = GETPOST('id');
 $contextpage = GETPOST('contextpage', 'aZ') ? GETPOST('contextpage', 'aZ') : 'isiworkconnectorinterface';
 
 $hookmanager->initHooks(array('isiworkconnectorcardinterface', 'globalcard'));
@@ -24,14 +24,17 @@ if (empty($reshook))
 {
     $error = 0;
     switch ($action) {
-        case 'process':
+        case 'import':
+
+            //ON DETERMINE SI LES FACTURES FOURNISSEURS DOIVENT ETRE AUTOMATIQUEMENT VALIDEES
+            $auto_validate_supplier_invoice = GETPOST('auto_validate_supplier_invoice');
 
             //ON IMPORTE LES FICHIERS
-            $TDocsImported = $object->runImportFiles();
+            $TFilesImported = $object->runImportFiles($auto_validate_supplier_invoice);
 
             //ON ENREGISTRE DANS LA SESSION LES DOCUMENTS OK ET KO
-            $_SESSION['OK'] = $TDocsImported['OK'];
-            $_SESSION['KO'] = $TDocsImported['KO'];
+            $_SESSION['OK'] = $TFilesImported['OK'];
+            $_SESSION['KO'] = $TFilesImported['KO'];
 
             //ON REVIENT SUR L'INTERFACE PRINCIPALE
             header('Location: ' . dol_buildpath('/isiworkconnector/interface.php', 1));
@@ -51,18 +54,22 @@ if (empty($reshook))
 llxHeader('', $title);
 print load_fiche_titre($langs->trans('ISIWork'), '', 'isiworkconnector@isiworkconnector');
 
-
+//NOMBRE DE DOCUMENTS DISPONIBLES A IMPORTER
 print "<div>". $nb_waitingfiles . " " . $langs->trans('FilesWaiting'). "</div><br>";
-print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=process">'.$langs->trans("IWImport").'</a></div>'."\n";
 
-//AFFICHAGE DU COMPTE RENDU DU DERNIER IMPORT EFFECTU
+//FORMULAIRE D'IMPORT DES FICHIERS FTP
+print ' <form name="import" id="import" action="'.$_SERVER["PHP_SELF"] . '?action=import" method="POST">
+<input type="checkbox" name="auto_validate_supplier_invoice" value="1"> Valider automatiquement les factures fournisseur créées<br>
+<br><input class="butAction" type="submit" value="'.$langs->trans("IWImport").'">
+</form>';
+
+//AFFICHAGE DU COMPTE RENDU DU DERNIER IMPORT EFFECTUE
 if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
     print "<br>";
     print '<div><b>COMPTE RENDU DU DERNIER IMPORT : </b></div>';
     print "<br>";
 
-    //FICHIERS TRAITES
-    if ($_SESSION['OK']) {
+    if ($_SESSION['OK']) {                                                                                  //OK
 
         foreach ($_SESSION['OK'] as $docType => $Tdocs) {
 
@@ -76,9 +83,7 @@ if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
         }
     }
 
-
-    //FICHIERS KO
-    if ($_SESSION['KO']) {
+    if ($_SESSION['KO']) {                                                                                  //KO
         print '<br>';
         print '<div>Echec d\'import :</div>';
 
