@@ -59,33 +59,92 @@ print load_fiche_titre($langs->trans('ISIWork'), '', 'isiworkconnector@isiworkco
 print "<div>". $nb_waitingfiles . " " . $langs->trans('FilesWaiting'). "</div><br>";
 print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=import">'.$langs->trans("Import").'</a></div>'."\n";
 
-//AFFICHAGE DU COMPTE RENDU DU DERNIER IMPORT EFFECTUE
+//RESULTATS DE L'IMPORT
 if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
-    print "<br>";
-    print '<div><b>COMPTE RENDU DU DERNIER IMPORT : </b></div>';
-    print "<br>";
 
-    if ($_SESSION['OK']) {                                                                                  //OK
+    //DOCUMENTS OK
+    if ($_SESSION['OK']) {
 
-        foreach ($_SESSION['OK'] as $docType => $Tdocs) {
+        print '<div>Documents créés ('.count($_SESSION['OK']).')</div>';
 
-            //FACTURES FOURNISSEUR
-            if ($docType == 'FactureFourn') {
-                print '<div>Factures créées : </div>';
-                foreach ($Tdocs as $id => $ref) {
-                    print '<div><a href = "' . DOL_URL_ROOT . '/fourn/facture/card.php?facid=' . $id . '">' . $ref . '</a></div>';
+        //ENTETE TABLEAU
+        print '<table class="noborder" width="100%">';
+        print '<tbody>';
+        print '<tr class="liste_titre">';
+        print '<th>Fichier</th>';
+        print '<th>Type document</th>';
+        print '<th>Document créé</th>';
+        print '</tr>';
+        print '<tr>';
+
+
+        //LIGNES DU TABLEAU
+        foreach ($_SESSION['OK'] as $file=>$doc) {
+
+            //FICHIER
+            print '<td>'.$file.'</td>';
+
+            //TYPE DU DOCUMENT
+            print '<td>'.$doc['type'].'</td>';
+
+            //LIEN VERS L'OBJET CREE
+            if($doc['type'] == "Facture fournisseur"){                                                          //facture fournisseur
+
+                //ON RECUPERE LA REFERENCE DE LA FACTURE CREE
+                $sql = "SELECT ref FROM " .MAIN_DB_PREFIX. "facture_fourn WHERE rowid=" . $doc['id'];
+                $resql = $db->query($sql);
+                if($resql){
+                    $object = $db->fetch_object($resql);
+                    $ref = $object->ref;
                 }
+
+                //ON AFFICHE
+                print '<td><a href="'.DOL_URL_ROOT.'/fourn/facture/card.php?facid='.$doc['id'].'">'.$ref.'</a></td>';
             }
+
+                $sql = "SELECT ref FROM " .MAIN_DB_PREFIX. "facture_fourn WHERE rowid=" . $doc['id'];
+                $resql = $db->query($sql);
+
+                if($resql){
+                    $object = $db->fetch_object($resql);
+                    $ref_supplierInvoice = $object->ref;
+                }
+            print '</tr>';
         }
+        print '</tbody>';
+        print '</table>';
     }
 
-    if ($_SESSION['KO']) {                                                                                  //KO
-        print '<br>';
-        print '<div>Echec d\'import :</div>';
+    print '<br>';
 
-        foreach ($_SESSION['KO'] as $doc) {
-            print '<div>' . $doc . ' > <b>KO</b></div>';
+    //DOCUMENTS KO
+    if ($_SESSION['KO']) {
+
+        print '<div>Echec d\'import ('.count($_SESSION['KO']).')</div>';//KO
+
+        //ENTETE TABLEAU
+        print '<table class="noborder" width="100%">';
+        print '<tbody>';
+        print '<tr class="liste_titre">';
+        print '<th>Fichier</th>';
+        print '<th>Message d\'erreur</th>';
+        print '</tr>';
+        print '<tr>';
+
+        //LIGNES DU TABLEAU
+        foreach ($_SESSION['KO'] as $file=>$value) {
+
+            //FICHIER
+            print '<td>'.$file.'</td>';
+
+            //MESSAGE D'ERREUR
+            print '<td>'.$value['error'].'</td>';
+            print '</tr>';
+
         }
+
+        print '</tbody>';
+        print '</table>';
     }
 }
 

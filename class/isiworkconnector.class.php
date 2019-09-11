@@ -101,7 +101,7 @@ class isiworkconnector extends SeedObject
 
                         } else {
                             $error++;
-                            $this->errors[] = $fileXML . ' :  PDF introuvable';
+                            $this->error = $fileXML . ' :  PDF introuvable';
                         }
 
                         //FACTURE CREE
@@ -119,7 +119,8 @@ class isiworkconnector extends SeedObject
                             //ON AJOUTE LA FACTURE (ID ET REF) A OK DANS LE TABLEAU RETOURNE PAR LA FONCTION
                             $supplierInvoice = new FactureFournisseur($this->db);
                             $supplierInvoice->fetch($id_newSupplierInvoice);
-                            $TFilesImported['OK']['FactureFourn'][$supplierInvoice->id] = $supplierInvoice->ref ;
+                            $TFilesImported['OK'][$fileXML]['type'] = 'Facture fournisseur';
+                            $TFilesImported['OK'][$fileXML]['id'] = $supplierInvoice->id;
 
                         }
 
@@ -127,31 +128,31 @@ class isiworkconnector extends SeedObject
                         else {
                             $error ++;
                             //ON AJOUTE LE NOM DU FICHIER XML AUX FICHIERS KO
-                            $TFilesImported['KO'][] = $fileXML;
+                            $TFilesImported['KO'][$fileXML]['error'] = $this->error;
                         }
                     }
 
                     //TYPE DE DOCUMENT INCONNU
                     else {
                         $error++;
-                        $this->errors[] = $fileXML . ' : le type "' . $objXml->type . '" est invalide';
+                        $this->error = $fileXML . ' : le type "' . $objXml->type . '" est invalide';
 
                         //ON AJOUTE LE  NOM FICHIER XML AUX FICHIERS KO
-                        $TFilesImported['KO'][] = $fileXML;
+                        $TFilesImported['KO'][$fileXML]['error'] = $this->error;
                     }
 
                 } else {
                     $error++;
-                    $this->errors[] = $fileXML . " : erreur lors du chargement du fichier";
+                    $this->error = $fileXML . " : erreur lors du chargement du fichier";
 
                     //ON AJOUTE LE  NOM FICHIER XML AUX FICHIERS KO
-                    $TFilesImported['KO'][] = $fileXML;
+                    $TFilesImported['KO'][$fileXML]['error'] = $this->error;
                 }
             }
         }
 
         if($error) {                                                                            //CONNEXION FTP OUT
-            setEventMessages('', $this->errors, "errors");
+            setEventMessages('', $this->error, "errors");
         }
 
         return $TFilesImported;
@@ -178,7 +179,7 @@ class isiworkconnector extends SeedObject
 
         if(empty($ftp_host)) {
             $error++;
-            $this->errors[] = "Information de connection FTP invalide : hôte non-défini";
+            $this->error = "Information de connection FTP invalide : hôte non-défini";
         }
 
         //CONNEXION FTP
@@ -187,7 +188,7 @@ class isiworkconnector extends SeedObject
 
         if(!$ftpc){
             $error++;
-            $this->errors[] = "Erreur de connection ftp";
+            $this->error = "Erreur de connection ftp";
         }
 
         //AUTHENTIFICATION FTP
@@ -195,7 +196,7 @@ class isiworkconnector extends SeedObject
 
         if(!$res_log){
             $error++;
-            $this->errors[] = "Erreur de login ftp";
+            $this->error = "Erreur de login ftp";
         }
 
         //MODE PASSIF FTP
@@ -211,12 +212,12 @@ class isiworkconnector extends SeedObject
 
             if (!$res_dir) {
                 $error++;
-                $this->errors[] = "Erreur de répertoire ftp" . $ftp_folder;
+                $this->error = "Erreur de répertoire ftp" . $ftp_folder;
             }
         }
 
         if($error) {                                                                            //CONNEXION FTP OUT
-            setEventMessages('', $this->errors, "errors");
+            setEventMessages('', $this->error, "errors");
             return 0;
         } else {
             return $ftpc;
@@ -291,7 +292,7 @@ class isiworkconnector extends SeedObject
 //            $res = $supplierInvoice->fetch('', $objXml->ref->__toString());
 //            if(!empty($res)){
 //                $error++;
-//                $this->errors[] = $fileXML . ' la référence "' . $objXml->ref . '" existe déjà';
+//                $this->error = $fileXML . ' la référence "' . $objXml->ref . '" existe déjà';
 //            }
 
             //on vérifie si le fournisseur existe ou si il en existe plusieur et qu'on n'arrive pas à déterminer quel est le bon
@@ -299,10 +300,10 @@ class isiworkconnector extends SeedObject
             $resql = $this->db->query($sql);
             if(!($this->db->num_rows($resql))){
                 $error++;
-                $this->errors[] = $fileXML . ' : le fournisseur "' .$objXml->fournisseur. '" n\'existe pas';
+                $this->error = $fileXML . ' : le fournisseur "' .$objXml->fournisseur. '" n\'existe pas';
             } elseif ($this->db->num_rows($resql) > 1){
                 $error++;
-                $this->errors[] = $fileXML . ' : plusieurs fournisseurs au nom de "' .$objXml->fournisseur. '"';
+                $this->error= $fileXML . ' : plusieurs fournisseurs au nom de "' .$objXml->fournisseur. '"';
             } else {
                 $supplier = $this->db->fetch_object($resql);
                 $supplierInvoice->socid = $supplier->rowid;
@@ -314,7 +315,7 @@ class isiworkconnector extends SeedObject
 
         } else {
             $error++;
-            $this->errors[] = $fileXML.' : fichier xml incomplet';
+            $this->error = $fileXML.' : fichier xml incomplet';
         }
 
 
@@ -334,11 +335,11 @@ class isiworkconnector extends SeedObject
                     } else {
                         if ($this->db->num_rows($resql) == 0) {
                             $error++;
-                            $this->errors[] = $fileXML . ' : produit/service "' . $refProduct . '" inexistant';
+                            $this->error = $fileXML . ' : produit/service "' . $refProduct . '" inexistant';
                             continue;
                         } elseif ($this->db->num_rows($resql) > 1) {
                             $error++;
-                            $this->errors[] = $fileXML . ' : plusieurs produits existants : ref ' . $refProduct;
+                            $this->error = $fileXML . ' : plusieurs produits existants : ref ' . $refProduct;
                             continue;
                         }
                     }
@@ -359,7 +360,7 @@ class isiworkconnector extends SeedObject
                             $TSupplierProducts[$product->rowid]['qty']  = $line->qty->__toString();
                         } else{
                             $error++;
-                            $this->errors[] = $refProduct . ' : pas de quantité renseignée';
+                            $this->error = $refProduct . ' : pas de quantité renseignée';
                         }
 
                         //réduction
@@ -367,7 +368,7 @@ class isiworkconnector extends SeedObject
                             $TSupplierProducts[$product->rowid]['remise_percent'] = $line->remise_percent->__toString();
                         } else {
                             $error++;
-                            $this->errors[] = $refProduct . ' : pas de remise renseignée';
+                            $this->error = $refProduct . ' : pas de remise renseignée';
                         }
                         }
 
@@ -376,7 +377,7 @@ class isiworkconnector extends SeedObject
                             $TSupplierProducts[$product->rowid]['label'] = $line->label->__toString();
                         } else {
                             $error++;
-                            $this->errors[] = $refProduct . ' : pas de label renseigné';
+                            $this->error = $refProduct . ' : pas de label renseigné';
                         }
 
                         //description
@@ -387,7 +388,7 @@ class isiworkconnector extends SeedObject
                             $TSupplierProducts[$product->rowid]['price']  = $line->pu_ht->__toString();
                         } else {
                             $error++;
-                            $this->errors[] = $refProduct . ' : pas de prix ht renseigné';
+                            $this->error = $refProduct . ' : pas de prix ht renseigné';
                         }
 
                         //taux de tva
@@ -395,7 +396,7 @@ class isiworkconnector extends SeedObject
                             $TSupplierProducts[$product->rowid]['tva_tx'] = $line->tva_tx->__toString();
                         } else {
                             $error++;
-                            $this->errors[] = $refProduct . ' : pas de taux de tva renseigné';
+                            $this->error = $refProduct . ' : pas de taux de tva renseigné';
                         }
                     }
                 }
@@ -437,13 +438,13 @@ class isiworkconnector extends SeedObject
                 $res = ftp_get($ftpc, $local_file_pdf, $remote_file_pdf, FTP_ASCII);
                 if (!$res) {
                     $error++;
-                    $this->errors[] = $fileXML . ' : fichier pdf non joint : ' . $supplierInvoice->ref;
+                    $this->error = $fileXML . ' : fichier pdf non joint : ' . $supplierInvoice->ref;
                 }
 
                 $res = ftp_get($ftpc, $local_file_xml, $remote_file_xml, FTP_ASCII);
                 if (!$res) {
                     $error++;
-                    $this->errors[] = $fileXML . ' : fichier xml non joint : ' . $supplierInvoice->ref;
+                    $this->error = $fileXML . ' : fichier xml non joint : ' . $supplierInvoice->ref;
                 }
 
                 //ON AJOUTE LES LIGNES DE LA FACTURE POUR CHAQUE PRODUIT
@@ -477,7 +478,7 @@ class isiworkconnector extends SeedObject
 
             else {
                 $error ++;
-                $this->errors[] = $supplierInvoice->error;
+                $this->error = $supplierInvoice->error;
             }
         }
 
