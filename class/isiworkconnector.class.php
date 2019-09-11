@@ -317,19 +317,19 @@ class isiworkconnector extends SeedObject
         }
 
 
-        //VERIFICATION DES PRODUITS/SERVICES
-        if ($objXml->lines) {
+        //ON RECUPERE LES PRODUITS DES LIGNES
+        if ($objXml->lines && !$error) {
             $TSupplierProducts = array();
             foreach ($objXml->lines as $item) {
                 foreach ($item as $line) {
-                    //id produit en fonction de la ref donnée
-                    $refProduct = $line->ref->__toString();
+
+                    //ON VERIFIE LE SI LE PRODUIT DE LA LIGNE EXISTE
+                    $refProduct = $line->ref->__toString();                                         //id produit en fonction de la ref donnée
                     $sql = 'SELECT * FROM llx_product WHERE ref = "' . $refProduct . '"';
                     $resql = $this->db->query($sql);
 
                     if($this->db->num_rows($resql) == 1) {
                         $product = $this->db->fetch_object($resql);
-                        $TSupplierProducts[] = $product;
                     } else {
                         if ($this->db->num_rows($resql) == 0) {
                             $error++;
@@ -341,9 +341,61 @@ class isiworkconnector extends SeedObject
                             continue;
                         }
                     }
+
+                    //PRODUIT EXISTE
+                    if(!$error){
+
+                        //ON RECUPERE ET VERIFIE TOUTES LES INFORMATIONS DE CHAQUE LIGNE
+
+                        //id produit
+                        $TSupplierProducts[$product->rowid]['id_product'] = $product->rowid;
+
+                        //type
+                        $TSupplierProducts[$product->rowid]['type'] = $product->fk_product_type;
+
+                        //quantité
+                        if(!empty($line->qty)){
+                            $TSupplierProducts[$product->rowid]['qty']  = $line->qty->__toString();
+                        } else{
+                            $error++;
+                            $this->errors[] = $refProduct . ' : pas de quantité renseignée';
+                        }
+
+                        //réduction
+                        if(!empty($line->remise_percent)) {
+                            $TSupplierProducts[$product->rowid]['remise_percent'] = $line->remise_percent->__toString();
+                        } else {
+                            $error++;
+                            $this->errors[] = $refProduct . ' : pas de remise renseignée';
+                        }
+                        }
+
+                        //label
+                        if(!empty($line->label)) {
+                            $product_label = $line->label->__toString();
+                        } else {
+                            $error++;
+                            $this->errors[] = $refProduct . ' : pas de label renseigné';
+                        }
+
+                        //prix unitaire ht
+                        if(!empty($line->pu_ht)) {
+                            $TSupplierProducts[$product->rowid]['price']  = $line->pu_ht->__toString();
+                        } else {
+                            $error++;
+                            $this->errors[] = $refProduct . ' : pas de prix ht renseigné';
+                        }
+
+                        //taux de tva
+                        if(!empty($line->tva_tx)) {
+                            $TSupplierProducts[$product->rowid]['tva_tx'] = $line->tva_tx->__toString();
+                        } else {
+                            $error++;
+                            $this->errors[] = $refProduct . ' : pas de taux de tva renseigné';
+                        }
+                    }
                 }
             }
-        }
 
 
         //DONNEES OBLIGATOIRES OK ET PRODUITS/SERVICES OK : CREATION FACTURE
@@ -392,72 +444,32 @@ class isiworkconnector extends SeedObject
                 $this->errors[] = $fileXML . ' : fichier xml non joint : ' . $supplierInvoice->ref;
             }
 
-            //ON AJOUTE LES LIGNES DE LA FACTURE
+            //ON AJOUTE LES LIGNES DE LA FACTURE POUR CHAQUE PRODUIT
             if ($TSupplierProducts){
 
                 foreach ($TSupplierProducts as $product) {
-
-                    //id produit
-                    $idProduct = $product->rowid;
-
-                    //type produit
-                    $typeProduct = $product->fk_product_type;
-
-                    //quantité
-                    if(!empty($line->qty)){
-                        $qty = $line->qty->__toString();
-                    } else{
-                        $qty = 0;
-                    }
-
-                    //réduction
-                    if(!empty($line->remise_percent)) {
-                        $remise_percent = $line->remise_percent->__toString();
-                    } else {
-                        $remise_percent = 0;
-                    }
-
-                    //label
-                    if(!empty($line->label)) {
-                        $label = $line->label->__toString();
-                    } else {
-                        $label = $product->label;
-                    }
-
-                    //prix unitaire ht
-                    if(!empty($line->pu_ht)) {
-                        $pu_ht = $line->pu_ht->__toString();
-                    } else {
-                        $pu_ht = $product->price;
-                    }
-
-                    //taux de tva
-                    if(!empty($line->tva_tx)) {
-                        $tva_tx = $line->tva_tx->__toString();
-                    } else {
-                        $tva_tx = $product->tva_tx;
-                    }
 
                     if (!$error) {
                         //ajout ligne
                         $supplierInvoice->addline(
                             '',
-                            $pu_ht,
-                            $tva_tx,
+                            $product['price'],
+                            $product['tva_tx'],
                             '',
                             '',
-                            $qty,
-                            $idProduct,
-                            $remise_percent,
+                            $product['qty'],
+                            $product['id_product'],
+                            $product['remise_percent'],
                             '',
                             '',
                             '',
                             '',
                             'HT',
-                            $typeProduct);
+                            $product['type']);
 
                     }
                 }
+
             }
         }
 
