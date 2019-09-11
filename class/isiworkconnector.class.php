@@ -94,8 +94,9 @@ class isiworkconnector extends SeedObject
 
                         $filePDF = isiworkconnector::verifyPDFLinkedToXML($PDFlinkedtoXML , $TFilesPDF);
 
-                        if ($filePDF) {
+                        if (!empty($filePDF)) {
                             //ON CREE LA FACTURE
+
                             $id_newSupplierInvoice = isiworkconnector::createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF, $auto_validate_supplier_invoice);       //si le fichier pdf existe, on crée la facture
 
                         } else {
@@ -315,6 +316,7 @@ class isiworkconnector extends SeedObject
             $this->errors[] = $fileXML.' : fichier xml incomplet';
         }
 
+
         //VERIFICATION DES PRODUITS/SERVICES
         if ($objXml->lines) {
             $TSupplierProducts = array();
@@ -327,8 +329,7 @@ class isiworkconnector extends SeedObject
 
                     if($this->db->num_rows($resql) == 1) {
                         $product = $this->db->fetch_object($resql);
-                        $TSupplierProducts[$refProduct]['id'] = $product->rowid;                    //id du produit
-                        $TSupplierProducts[$refProduct]['type'] = $product->fk_product_type;        //type du produit (produit ou service)
+                        $TSupplierProducts[] = $product;
                     } else {
                         if ($this->db->num_rows($resql) == 0) {
                             $error++;
@@ -352,6 +353,10 @@ class isiworkconnector extends SeedObject
             if(!empty($objXml->date_echeance)){
                 $supplierInvoice->date_echeance = strftime('%Y-%m-%d',strtotime($objXml->date_echeance));
             }
+            if(!empty($objXml->ref_supplier)){
+                $supplierInvoice->ref_supplier = $objXml->ref_supplier->__toString();
+            }
+
 
             //CREATION DE LA FACTURE
             $id_supplierInvoice = $supplierInvoice->create($user);
@@ -389,28 +394,49 @@ class isiworkconnector extends SeedObject
 
             //ON AJOUTE LES LIGNES DE LA FACTURE
             if ($TSupplierProducts){
+
                 foreach ($TSupplierProducts as $product) {
 
                     //id produit
-                    $idProduct = $product['id'];
+                    $idProduct = $product->rowid;
 
                     //type produit
-                    $typeProduct = $product['type'];
+                    $typeProduct = $product->fk_product_type;
 
                     //quantité
-                    $qty = $line->qty->__toString();
+                    if(!empty($line->qty)){
+                        $qty = $line->qty->__toString();
+                    } else{
+                        $qty = 0;
+                    }
 
                     //réduction
-                    $remise_percent = $line->remise_percent->__toString();
+                    if(!empty($line->remise_percent)) {
+                        $remise_percent = $line->remise_percent->__toString();
+                    } else {
+                        $remise_percent = 0;
+                    }
 
-                    //description
-                    $description = $line->description->__toString();
+                    //label
+                    if(!empty($line->label)) {
+                        $label = $line->label->__toString();
+                    } else {
+                        $label = $product->label;
+                    }
 
                     //prix unitaire ht
-                    $pu_ht = $line->pu_ht->__toString();
+                    if(!empty($line->pu_ht)) {
+                        $pu_ht = $line->pu_ht->__toString();
+                    } else {
+                        $pu_ht = $product->price;
+                    }
 
                     //taux de tva
-                    $tva_tx = $line->tva_tx->__toString();
+                    if(!empty($line->tva_tx)) {
+                        $tva_tx = $line->tva_tx->__toString();
+                    } else {
+                        $tva_tx = $product->tva_tx;
+                    }
 
                     if (!$error) {
                         //ajout ligne
