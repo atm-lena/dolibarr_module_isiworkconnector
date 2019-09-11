@@ -125,6 +125,7 @@ class isiworkconnector extends SeedObject
 
                         //FACTURE NON CREE
                         else {
+                            $error ++;
                             //ON AJOUTE LE NOM DU FICHIER XML AUX FICHIERS KO
                             $TFilesImported['KO'][] = $fileXML;
                         }
@@ -284,14 +285,14 @@ class isiworkconnector extends SeedObject
         $supplierInvoice = new FactureFournisseur($this->db);
 
         //ON RENSEIGNE LES INFORMATIONS OBLIGATOIRES POUR UNE FACTURE
-        if(!empty($objXml->ref) && !empty($objXml->fournisseur) && !empty($objXml->date) && !empty($objXml->ref_supplier)){
+        if(!empty($objXml->fournisseur) && !empty($objXml->date) && !empty($objXml->ref_supplier)){
 
-            //on vérifie si la ref facture n'existe pas déjà
-            $res = $supplierInvoice->fetch('', $objXml->ref->__toString());
-            if(!empty($res)){
-                $error++;
-                $this->errors[] = $fileXML . ' la référence "' . $objXml->ref . '" existe déjà';
-            }
+//            //on vérifie si la ref facture n'existe pas déjà
+//            $res = $supplierInvoice->fetch('', $objXml->ref->__toString());
+//            if(!empty($res)){
+//                $error++;
+//                $this->errors[] = $fileXML . ' la référence "' . $objXml->ref . '" existe déjà';
+//            }
 
             //on vérifie si le fournisseur existe ou si il en existe plusieur et qu'on n'arrive pas à déterminer quel est le bon
             $sql = 'SELECT * FROM ' .MAIN_DB_PREFIX. 'societe WHERE code_fournisseur IS NOT NULL AND nom = "'. $objXml->fournisseur . '";';
@@ -372,11 +373,14 @@ class isiworkconnector extends SeedObject
 
                         //label
                         if(!empty($line->label)) {
-                            $product_label = $line->label->__toString();
+                            $TSupplierProducts[$product->rowid]['label'] = $line->label->__toString();
                         } else {
                             $error++;
                             $this->errors[] = $refProduct . ' : pas de label renseigné';
                         }
+
+                        //description
+                        $TSupplierProducts[$product->rowid]['description'] = $line->description->__toString();
 
                         //prix unitaire ht
                         if(!empty($line->pu_ht)) {
@@ -399,83 +403,87 @@ class isiworkconnector extends SeedObject
 
 
         //DONNEES OBLIGATOIRES OK ET PRODUITS/SERVICES OK : CREATION FACTURE
-        if(!$error){
+        if(!$error) {
 
             //RAJOUT DONNEES NON OBLIGATOIRES
-            if(!empty($objXml->date_echeance)){
-                $supplierInvoice->date_echeance = strftime('%Y-%m-%d',strtotime($objXml->date_echeance));
+            if (!empty($objXml->date_echeance)) {
+                $supplierInvoice->date_echeance = strftime('%Y-%m-%d', strtotime($objXml->date_echeance));
             }
-            if(!empty($objXml->ref_supplier)){
-                $supplierInvoice->ref_supplier = $objXml->ref_supplier->__toString();
-            }
-
 
             //CREATION DE LA FACTURE
             $id_supplierInvoice = $supplierInvoice->create($user);
 
-            //ON RECUPERE LA FACTURE CREE
-            $supplierInvoice->fetch($id_supplierInvoice);
+            if ($id_supplierInvoice > 0) {
 
-            //REFERENCE EXTERNE : NOM DU FICHIER XML SOURCE
-            $supplierInvoice->update_ref_ext($fileXML);
+                //ON RECUPERE LA FACTURE CREE
+                $supplierInvoice->fetch($id_supplierInvoice);
 
-            //ON JOINT LE FICHIER PDF ET XML A LA FACTURE
-            $ref = dol_sanitizeFileName($supplierInvoice->ref);
-            $local_dir = $conf->fournisseur->facture->dir_output . '/' . get_exdir($supplierInvoice->id, 2, 0, 0, $supplierInvoice, 'invoice_supplier') . $ref;
-            if (!dol_is_dir($local_dir)) {
-                dol_mkdir($local_dir);
-            }
+                //REFERENCE EXTERNE : NOM DU FICHIER XML SOURCE
+                $supplierInvoice->update_ref_ext($fileXML);
 
-            $remote_file_pdf = $filePDF;
-            $remote_file_xml = $fileXML;
-
-            $local_file_pdf = $local_dir . '/' . $remote_file_pdf;
-            $local_file_xml = $local_dir . '/' . $remote_file_xml;
-
-            $res = ftp_get($ftpc, $local_file_pdf, $remote_file_pdf, FTP_ASCII);
-            if(!$res){
-                $error++;
-                $this->errors[] = $fileXML . ' : fichier pdf non joint : ' . $supplierInvoice->ref;
-            }
-
-            $res = ftp_get($ftpc, $local_file_xml, $remote_file_xml, FTP_ASCII);
-            if(!$res){
-                $error++;
-                $this->errors[] = $fileXML . ' : fichier xml non joint : ' . $supplierInvoice->ref;
-            }
-
-            //ON AJOUTE LES LIGNES DE LA FACTURE POUR CHAQUE PRODUIT
-            if ($TSupplierProducts){
-
-                foreach ($TSupplierProducts as $product) {
-
-                    if (!$error) {
-                        //ajout ligne
-                        $supplierInvoice->addline(
-                            '',
-                            $product['price'],
-                            $product['tva_tx'],
-                            '',
-                            '',
-                            $product['qty'],
-                            $product['id_product'],
-                            $product['remise_percent'],
-                            '',
-                            '',
-                            '',
-                            '',
-                            'HT',
-                            $product['type']);
-
-                    }
+                //ON JOINT LE FICHIER PDF ET XML A LA FACTURE
+                $ref = dol_sanitizeFileName($supplierInvoice->ref);
+                $local_dir = $conf->fournisseur->facture->dir_output . '/' . get_exdir($supplierInvoice->id, 2, 0, 0, $supplierInvoice, 'invoice_supplier') . $ref;
+                if (!dol_is_dir($local_dir)) {
+                    dol_mkdir($local_dir);
                 }
 
+                $remote_file_pdf = $filePDF;
+                $remote_file_xml = $fileXML;
+
+                $local_file_pdf = $local_dir . '/' . $remote_file_pdf;
+                $local_file_xml = $local_dir . '/' . $remote_file_xml;
+
+                $res = ftp_get($ftpc, $local_file_pdf, $remote_file_pdf, FTP_ASCII);
+                if (!$res) {
+                    $error++;
+                    $this->errors[] = $fileXML . ' : fichier pdf non joint : ' . $supplierInvoice->ref;
+                }
+
+                $res = ftp_get($ftpc, $local_file_xml, $remote_file_xml, FTP_ASCII);
+                if (!$res) {
+                    $error++;
+                    $this->errors[] = $fileXML . ' : fichier xml non joint : ' . $supplierInvoice->ref;
+                }
+
+                //ON AJOUTE LES LIGNES DE LA FACTURE POUR CHAQUE PRODUIT
+                if ($TSupplierProducts) {
+
+                    foreach ($TSupplierProducts as $product) {
+
+                        if (!$error) {
+                            //ajout ligne
+                            $supplierInvoice->addline(
+                                $product['description'],
+                                $product['price'],
+                                $product['tva_tx'],
+                                '',
+                                '',
+                                $product['qty'],
+                                $product['id_product'],
+                                $product['remise_percent'],
+                                '',
+                                '',
+                                '',
+                                '',
+                                'HT',
+                                $product['type']);
+
+                        }
+                    }
+
+                }
+            }
+
+            else {
+                $error ++;
+                $this->errors[] = $supplierInvoice->error;
             }
         }
 
         //ON VALIDE LA FACTURE
-        if(!$error && !empty($auto_validate)){
-            $supplierInvoice->validate($user, $objXml->ref->__toString());
+        if(!empty($conf->global->IMPORT_VALIDATION)){
+            $supplierInvoice->validate($user);
         }
 
         if($error) {

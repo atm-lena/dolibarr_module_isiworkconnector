@@ -119,6 +119,11 @@ setup_print_input_form_part('IWCONNECTOR_FTP_FOLDER');
 setup_print_on_off('IWCONNECTOR_FTP_PASSIVE_MODE');
 
 
+//Validation des documents créés
+setup_print_title('Import');
+setup_print_on_off('IMPORT_VALIDATION');
+
+
 print '</table>';
 
 dol_fiche_end(-1);

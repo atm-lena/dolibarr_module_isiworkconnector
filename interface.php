@@ -57,12 +57,7 @@ print load_fiche_titre($langs->trans('ISIWork'), '', 'isiworkconnector@isiworkco
 
 //NOMBRE DE DOCUMENTS DISPONIBLES A IMPORTER
 print "<div>". $nb_waitingfiles . " " . $langs->trans('FilesWaiting'). "</div><br>";
-
-//FORMULAIRE D'IMPORT DES FICHIERS FTP
-print ' <form name="import" id="import" action="'.$_SERVER["PHP_SELF"] . '?action=import" method="POST">
-<input type="checkbox" name="auto_validate_supplier_invoice" value="1"> Valider automatiquement les factures fournisseur créées<br>
-<br><input class="butAction" type="submit" value="'.$langs->trans("IWImport").'">
-</form>';
+print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=import">'.$langs->trans("Import").'</a></div>'."\n";
 
 //AFFICHAGE DU COMPTE RENDU DU DERNIER IMPORT EFFECTUE
 if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {

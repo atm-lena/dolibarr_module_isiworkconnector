@@ -38,10 +38,10 @@ function isiworkconnectorAdminPrepareHead()
     $head[$h][1] = $langs->trans("Parameters");
     $head[$h][2] = 'settings';
     $h++;
-    $head[$h][0] = dol_buildpath("/isiworkconnector/admin/isiworkconnector_extrafields.php", 1);
-    $head[$h][1] = $langs->trans("ExtraFields");
-    $head[$h][2] = 'extrafields';
-    $h++;
+//    $head[$h][0] = dol_buildpath("/isiworkconnector/admin/isiworkconnector_extrafields.php", 1);
+//    $head[$h][1] = $langs->trans("ExtraFields");
+//    $head[$h][2] = 'extrafields';
+//    $h++;
     $head[$h][0] = dol_buildpath("/isiworkconnector/admin/isiworkconnector_about.php", 1);
     $head[$h][1] = $langs->trans("About");
     $head[$h][2] = 'about';
