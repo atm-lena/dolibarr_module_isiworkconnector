@@ -86,6 +86,8 @@ class isiworkconnector extends SeedObject
                     //TRAITEMENT FACTURE FOURNISSEUR
                     if ($objXml->type == 'Facture fournisseur') {
 
+                        $id_newSupplierInvoice = 0;
+
                         //ON VERIFIE L'EXISTENCE DU FICHIER PDF ASSOCIE AU XML
                         $PDFlinkedtoXML = str_replace("\\", "/", $objXml->DocPath->__toString());
                         $PDFlinkedtoXML =  basename($PDFlinkedtoXML);
@@ -94,7 +96,7 @@ class isiworkconnector extends SeedObject
 
                         if ($filePDF) {
                             //ON CREE LA FACTURE
-                            $res = isiworkconnector::createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF, $auto_validate_supplier_invoice);       //si le fichier pdf existe, on crée la facture
+                            $id_newSupplierInvoice = isiworkconnector::createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF, $auto_validate_supplier_invoice);       //si le fichier pdf existe, on crée la facture
 
                         } else {
                             $error++;
@@ -102,7 +104,7 @@ class isiworkconnector extends SeedObject
                         }
 
                         //FACTURE CREE
-                        if (!empty($res)) {
+                        if (!empty($id_newSupplierInvoice)) {
 
                             //DEPLACEMENT FICHIERS XML ET PDF DANS LE DOSSIER "TRAITE"
                             $folder_dest = "Traité";                                                //Dossier de destination
@@ -114,10 +116,9 @@ class isiworkconnector extends SeedObject
                             isiworkconnector::cleanFTPDirectory($TFiles, $folder_dest);
 
                             //ON AJOUTE LA FACTURE (ID ET REF) A OK DANS LE TABLEAU RETOURNE PAR LA FONCTION
-                            $id_supplierInvoice = $res;
                             $supplierInvoice = new FactureFournisseur($this->db);
-                            $supplierInvoice->fetch($id_supplierInvoice);
-                            $TFilesImported['OK']['FactureFourn'][$id_supplierInvoice] = $supplierInvoice->ref ;
+                            $supplierInvoice->fetch($id_newSupplierInvoice);
+                            $TFilesImported['OK']['FactureFourn'][$supplierInvoice->id] = $supplierInvoice->ref ;
 
                         }
 
