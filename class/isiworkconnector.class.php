@@ -39,7 +39,7 @@ class isiworkconnector extends SeedObject
      * @return array   id/nom objet OK et nom fichiers "KO"
      */
 
-    public function runImportFiles ($auto_validate_supplier_invoice = ''){
+    public function runImportFiles (){
         global $conf;
 
         require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
@@ -79,17 +79,23 @@ class isiworkconnector extends SeedObject
                 $ftp_folder = (empty($conf->global->IWCONNECTOR_FTP_FOLDER)) ? "" : $conf->global->IWCONNECTOR_FTP_FOLDER;
                 $ftp_file_path = $ftp_folder.$fileXML;
 
-                $objXml = simplexml_load_file('ftp://'.$conf->global->IWCONNECTOR_FTP_USER.':'.$conf->global->IWCONNECTOR_FTP_PASS.'@'.$conf->global->IWCONNECTOR_FTP_HOST.':'.$conf->global->IWCONNECTOR_FTP_PORT.$ftp_file_path);
+                //LECTURE DU FICHIER XML
+                $textXml = file_get_contents('ftp://'.$conf->global->IWCONNECTOR_FTP_USER.':'.$conf->global->IWCONNECTOR_FTP_PASS.'@'.$conf->global->IWCONNECTOR_FTP_HOST.':'.$conf->global->IWCONNECTOR_FTP_PORT.$ftp_file_path);
+                $domXml = new DOMDocument();
+                $domXml->loadXML($textXml);
 
-                if($objXml) {
+                if($domXml) {
+
+                    $docType= $domXml->getElementsByTagName('type')->item(0)->nodeValue;
 
                     //TRAITEMENT FACTURE FOURNISSEUR
-                    if ($objXml->type == 'Facture fournisseur') {
+                    if ($docType == 'Facture fournisseur') {
 
                         $id_newSupplierInvoice = 0;
 
                         //ON VERIFIE L'EXISTENCE DU FICHIER PDF ASSOCIE AU XML
-                        $PDFlinkedtoXML = str_replace("\\", "/", $objXml->DocPath->__toString());
+                        $docPath =  $domXml->getElementsByTagName('DocPath')->item(0)->nodeValue;
+                        $PDFlinkedtoXML = str_replace("\\", "/", $docPath);
                         $PDFlinkedtoXML =  basename($PDFlinkedtoXML);
 
                         $filePDF = isiworkconnector::verifyPDFLinkedToXML($PDFlinkedtoXML , $TFilesPDF);
@@ -97,7 +103,7 @@ class isiworkconnector extends SeedObject
                         if (!empty($filePDF)) {
                             //ON CREE LA FACTURE
 
-                            $id_newSupplierInvoice = isiworkconnector::createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF, $auto_validate_supplier_invoice);       //si le fichier pdf existe, on crée la facture
+                            $id_newSupplierInvoice = isiworkconnector::createDolibarrInvoiceSupplier($ftpc, $domXml, $fileXML, $filePDF);       //si le fichier pdf existe, on crée la facture
 
                         } else {
                             $error++;
@@ -135,7 +141,7 @@ class isiworkconnector extends SeedObject
                     //TYPE DE DOCUMENT INCONNU
                     else {
                         $error++;
-                        $this->error = 'Le type "' . $objXml->type . '" est invalide';
+                        $this->error = 'Le type "' . $docType . '" est invalide';
 
                         //ON AJOUTE LE  NOM FICHIER XML AUX FICHIERS KO
                         $TFilesImported['KO'][$fileXML]['error'] = $this->error;
@@ -262,13 +268,13 @@ class isiworkconnector extends SeedObject
      * Crée une facture fournisseur à partir à partir d'une connexion FTP et d'un objet XML
      *
      * @param $ftpc
-     * @param $objXml
+     * @param $domXml
      * @param $fileXML
      * @param $filePDF
      * @return int                  1 si facture crée, 0 si erreur
      */
 
-    public function createDolibarrInvoiceSupplier($ftpc, $objXml, $fileXML, $filePDF, $auto_validate = ''){
+    public function createDolibarrInvoiceSupplier($ftpc, $domXml, $fileXML, $filePDF){
 
         global $user, $conf, $langs;
 
@@ -281,25 +287,29 @@ class isiworkconnector extends SeedObject
         $supplierInvoice = new FactureFournisseur($this->db);
 
         //ON RENSEIGNE LES INFORMATIONS OBLIGATOIRES POUR UNE FACTURE
-        if(!empty($objXml->fournisseur) && !empty($objXml->date) && !empty($objXml->ref_supplier)){
+        $fournisseur =  $domXml->getElementsByTagName('fournisseur')->item(0)->nodeValue;
+        $date =  $domXml->getElementsByTagName('date')->item(0)->nodeValue;
+        $ref_supplier =  $domXml->getElementsByTagName('ref_supplier')->item(0)->nodeValue;
+
+        if(!empty($fournisseur) && !empty($date) && !empty($ref_supplier)){
 
             //on vérifie si le fournisseur existe ou si il en existe plusieur et qu'on n'arrive pas à déterminer quel est le bon
-            $sql = 'SELECT * FROM ' .MAIN_DB_PREFIX. 'societe WHERE code_fournisseur IS NOT NULL AND nom = "'. $objXml->fournisseur . '";';
+            $sql = 'SELECT * FROM ' .MAIN_DB_PREFIX. 'societe WHERE code_fournisseur IS NOT NULL AND nom = "'. $fournisseur . '";';
             $resql = $this->db->query($sql);
             if(!($this->db->num_rows($resql))){
                 $error++;
-                $this->error = 'Le fournisseur "' .$objXml->fournisseur. '" n\'existe pas';
+                $this->error = 'Le fournisseur "' .$fournisseur. '" n\'existe pas';
             } elseif ($this->db->num_rows($resql) > 1){
                 $error++;
-                $this->error = 'Plusieurs fournisseurs au nom de "' .$objXml->fournisseur. '"';
+                $this->error = 'Plusieurs fournisseurs au nom de "' .$fournisseur. '"';
             } else {
                 $supplier = $this->db->fetch_object($resql);
                 $supplierInvoice->socid = $supplier->rowid;
             }
 
-            $supplierInvoice->date = strftime('%Y-%m-%d',strtotime($objXml->date));
+            $supplierInvoice->date = strftime('%Y-%m-%d',strtotime($date));
 
-            $supplierInvoice->ref_supplier = $objXml->ref_supplier->__toString();
+            $supplierInvoice->ref_supplier = $ref_supplier;
 
         } else {
             $error++;
@@ -307,96 +317,97 @@ class isiworkconnector extends SeedObject
         }
 
 
-        //ON RECUPERE LES PRODUITS DES LIGNES
-        if ($objXml->lines && !$error) {
-            $TSupplierProducts = array();
-            foreach ($objXml->lines as $item) {
-                foreach ($item as $line) {
+        //ON VERIFIE SI LES INFOS PDT/SERV SONT OK
+        if ($domXml->getElementsByTagName('line') && !$error) {
 
-                    //ON VERIFIE LE SI LE PRODUIT DE LA LIGNE EXISTE
-                    $refProduct = $line->ref->__toString();                                         //id produit en fonction de la ref donnée
-                    $sql = 'SELECT * FROM llx_product WHERE ref = "' . $refProduct . '"';
-                    $resql = $this->db->query($sql);
+            $TSupplierProducts = array();                                                       //On récupère les infos de chaque produit dans ce tableau
 
-                    if($this->db->num_rows($resql) == 1) {
-                        $product = $this->db->fetch_object($resql);
-                    } else {
-                        if ($this->db->num_rows($resql) == 0) {
-                            $error++;
-                            $this->error = 'Le produit/service "' . $refProduct . '" inexistant';
-                            continue;
-                        } elseif ($this->db->num_rows($resql) > 1) {
-                            $error++;
-                            $this->error = 'Plusieurs produits/services existants : ref ' . $refProduct;
-                            continue;
-                        }
-                    }
+            $lines =  $domXml->getElementsByTagName('line');                                    //On récupère les lignes du fichier xml
 
-                    //PRODUIT EXISTE
-                    if(!$error){
+            foreach ($lines as $line) {
 
-                        //ON RECUPERE ET VERIFIE TOUTES LES INFORMATIONS DE CHAQUE LIGNE
+                //ON VERIFIE LE SI LE PRODUIT DE LA LIGNE EXISTE
+                $refProduct = $line->getElementsByTagName('ref')->item(0)->nodeValue;            //id produit en fonction de la ref donnée dans le fichier xml
+                $sql = 'SELECT * FROM llx_product WHERE ref = "' . $refProduct . '"';
+                $resql = $this->db->query($sql);
 
-                        //id produit
-                        $TSupplierProducts[$product->rowid]['id_product'] = $product->rowid;
-
-                        //type
-                        $TSupplierProducts[$product->rowid]['type'] = $product->fk_product_type;
-
-                        //quantité
-                        if(!empty($line->qty)){
-                            $TSupplierProducts[$product->rowid]['qty']  = $line->qty->__toString();
-                        } else{
-                            $error++;
-                            $this->error = 'Pas de quantité renseignée pour le produit/service "' . $refProduct . '"';
-                        }
-
-                        //réduction
-                        if(!empty($line->remise_percent)) {
-                            $TSupplierProducts[$product->rowid]['remise_percent'] = $line->remise_percent->__toString();
-                        } else {
-                            $error++;
-                            $this->error = $refProduct . 'Pas de remise renseignée';
-                        }
-                        }
-
-                        //label
-                        if(!empty($line->label)) {
-                            $TSupplierProducts[$product->rowid]['label'] = $line->label->__toString();
-                        } else {
-                            $error++;
-                            $this->error = $refProduct . 'Pas de label renseigné';
-                        }
-
-                        //description
-                        $TSupplierProducts[$product->rowid]['description'] = $line->description->__toString();
-
-                        //prix unitaire ht
-                        if(!empty($line->pu_ht)) {
-                            $TSupplierProducts[$product->rowid]['price']  = $line->pu_ht->__toString();
-                        } else {
-                            $error++;
-                            $this->error = $refProduct . 'Pas de prix ht renseigné';
-                        }
-
-                        //taux de tva
-                        if(!empty($line->tva_tx)) {
-                            $TSupplierProducts[$product->rowid]['tva_tx'] = $line->tva_tx->__toString();
-                        } else {
-                            $error++;
-                            $this->error = $refProduct . 'Pas de taux de tva renseigné';
-                        }
+                if($this->db->num_rows($resql) == 1) {
+                    $product = $this->db->fetch_object($resql);
+                } else {
+                    if ($this->db->num_rows($resql) == 0) {
+                        $error++;
+                        $this->error = 'Le produit/service "' . $refProduct . '" inexistant';
+                        continue;
+                    } elseif ($this->db->num_rows($resql) > 1) {
+                        $error++;
+                        $this->error = 'Plusieurs produits/services existants : ref ' . $refProduct;
+                        continue;
                     }
                 }
+
+                //PRODUIT EXISTE : ON RECUPERE LES INFOS DU PRODUIT
+                if(!$error) {
+
+                    //id produit
+                    $TSupplierProducts[$product->rowid]['id_product'] = $product->rowid;
+
+                    //type
+                    $TSupplierProducts[$product->rowid]['type'] = $product->fk_product_type;
+
+                    //quantité
+                    $qty = $line->getElementsByTagName('qty')->item(0)->nodeValue;
+                    if (!empty($qty)) {
+                        $TSupplierProducts[$product->rowid]['qty'] = $qty;
+                    } else {
+                        $error++;
+                        $this->error = 'Pas de quantité renseignée pour le produit/service "' . $refProduct . '"';
+                    }
+
+                    //réduction
+                    $remise_percent = $line->getElementsByTagName('remise_percent')->item(0)->nodeValue;
+                    if (!empty($remise_percent)) {
+                        $TSupplierProducts[$product->rowid]['remise_percent'] = $remise_percent;
+                    } else {
+                        $error++;
+                        $this->error = 'Pas de remise renseignée pour le produit/service "' . $refProduct . '"';
+                    }
+
+                    //label
+                    $TSupplierProducts[$product->rowid]['label'] = $line->getElementsByTagName('label')->item(0)->nodeValue;
+
+                    //description
+                    $TSupplierProducts[$product->rowid]['description'] = $line->getElementsByTagName('description')->item(0)->nodeValue;
+
+                    //prix unitaire ht
+                    $pu_ht = $line->getElementsByTagName('pu_ht')->item(0)->nodeValue;
+                    if (!empty($pu_ht)) {
+                        $TSupplierProducts[$product->rowid]['price'] = $pu_ht;
+                    } else {
+                        $error++;
+                        $this->error = 'Pas de prix ht renseigné pour le produit/service : "' . $refProduct . '"';
+                    }
+
+                    //taux de tva
+                    $tva_tx = $line->getElementsByTagName('tva_tx')->item(0)->nodeValue;
+                    if (!empty($tva_tx)) {
+                        $TSupplierProducts[$product->rowid]['tva_tx'] = $tva_tx;
+                    } else {
+                        $error++;
+                        $this->error = 'Pas de taux de tva renseigné pour le produit/service "' . $refProduct . '"';
+                    }
+                }
+
             }
+        }
 
 
         //DONNEES OBLIGATOIRES OK ET PRODUITS/SERVICES OK : CREATION FACTURE
         if(!$error) {
 
             //RAJOUT DONNEES NON OBLIGATOIRES
-            if (!empty($objXml->date_echeance)) {
-                $supplierInvoice->date_echeance = strftime('%Y-%m-%d', strtotime($objXml->date_echeance));
+            $date_echeance = $domXml->getElementsByTagName('date_echeance')->item(0)->nodeValue;
+            if (!empty($date_echeance)) {
+                $supplierInvoice->date_echeance = strftime('%Y-%m-%d', strtotime($date_echeance ));
             }
 
             //CREATION DE LA FACTURE
@@ -439,12 +450,11 @@ class isiworkconnector extends SeedObject
                 //on renomme les fichiers joints suivant le standard dolibarr
                 $newname_file_pdf = $local_dir . '/' . $supplierInvoice->ref . '-' .$filePDF;
                 rename($local_file_pdf, $newname_file_pdf);
-
                 $newname_file_xml = $local_dir . '/' . $supplierInvoice->ref . '-' .$fileXML;
                 rename($local_file_xml, $newname_file_xml);
 
-                //ON AJOUTE LES LIGNES DE LA FACTURE POUR CHAQUE PRODUIT
-                if ($TSupplierProducts) {
+                //ON AJOUTE LES LIGNES DE LA FACTURE POUR CHAQUE PRODUIT/SERVICE
+                if (!empty($TSupplierProducts)) {
 
                     foreach ($TSupplierProducts as $product) {
 
@@ -464,8 +474,8 @@ class isiworkconnector extends SeedObject
                                 '',
                                 '',
                                 'HT',
-                                $product['type']);
-
+                                $product['type']
+                            );
                         }
                     }
 
