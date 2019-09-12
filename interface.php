@@ -32,7 +32,7 @@ if (empty($reshook))
             //ON IMPORTE LES FICHIERS
             $TFilesImported = $object->runImportFiles($auto_validate_supplier_invoice);
 
-            //ON ENREGISTRE DANS LA SESSION LES DOCUMENTS OK ET KO
+            //ON ENREGISTRE DANS LA SESSION LES DOCUMENTS "OK" ET "KO"
             $_SESSION['OK'] = $TFilesImported['OK'];
             $_SESSION['KO'] = $TFilesImported['KO'];
 
@@ -42,7 +42,11 @@ if (empty($reshook))
             exit;
 
         default :
+
+            //CONNEXION FTP
             $ftpc=$object->FTPConnection();
+
+            //NOMBRE DE FICHIERS XML NON TRAITES SUR LE SERVEUR FTP
             $nb_waitingfiles = $object->get_nb_XMLFilesFTP($ftpc);
     }
 }
@@ -90,7 +94,7 @@ if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
             //LIEN VERS L'OBJET CREE
             if($doc['type'] == "Facture fournisseur"){                                                          //facture fournisseur
 
-                //ON RECUPERE LA REFERENCE DE LA FACTURE CREE
+                //ON RECUPERE LA REFERENCE DE LA FACTURE CREEE
                 $sql = "SELECT ref FROM " .MAIN_DB_PREFIX. "facture_fourn WHERE rowid=" . $doc['id'];
                 $resql = $db->query($sql);
                 if($resql){
@@ -102,13 +106,14 @@ if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
                 print '<td><a href="'.DOL_URL_ROOT.'/fourn/facture/card.php?facid='.$doc['id'].'">'.$ref.'</a></td>';
             }
 
-                $sql = "SELECT ref FROM " .MAIN_DB_PREFIX. "facture_fourn WHERE rowid=" . $doc['id'];
-                $resql = $db->query($sql);
+            $sql = "SELECT ref FROM " .MAIN_DB_PREFIX. "facture_fourn WHERE rowid=" . $doc['id'];
+            $resql = $db->query($sql);
 
-                if($resql){
-                    $object = $db->fetch_object($resql);
-                    $ref_supplierInvoice = $object->ref;
-                }
+            if($resql){
+                $object = $db->fetch_object($resql);
+                $ref_supplierInvoice = $object->ref;
+            }
+
             print '</tr>';
         }
         print '</tbody>';
