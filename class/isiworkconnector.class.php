@@ -329,7 +329,7 @@ class isiworkconnector extends SeedObject
 
                 //ON VERIFIE SI LE PRODUIT/SERVICE DE LA LIGNE EXISTE
                 $refProduct = $line->getElementsByTagName('ref')->item(0)->nodeValue;            //id produit en fonction de la ref donnée dans le fichier xml
-                $sql = 'SELECT * FROM' . MAIN_DB_PREFIX . 'product WHERE ref = "' . $refProduct . '"';
+                $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'product WHERE ref = "' . $refProduct . '"';
                 $resql = $this->db->query($sql);
 
                 if($this->db->num_rows($resql) == 1) {
