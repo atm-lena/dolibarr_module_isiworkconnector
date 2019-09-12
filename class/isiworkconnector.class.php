@@ -429,11 +429,19 @@ class isiworkconnector extends SeedObject
                     $this->error = 'Fichier pdf non joint à la facture créée : ' . $supplierInvoice->ref;
                 }
 
+
                 $res = ftp_get($ftpc, $local_file_xml, $remote_file_xml, FTP_ASCII);
                 if (!$res) {
                     $error++;
                     $this->error = 'Fichier xml non joint à la facture créée : ' . $supplierInvoice->ref;
                 }
+
+                //on renomme les fichiers joints suivant le standard dolibarr
+                $newname_file_pdf = $local_dir . '/' . $supplierInvoice->ref . '-' .$filePDF;
+                rename($local_file_pdf, $newname_file_pdf);
+
+                $newname_file_xml = $local_dir . '/' . $supplierInvoice->ref . '-' .$fileXML;
+                rename($local_file_xml, $newname_file_xml);
 
                 //ON AJOUTE LES LIGNES DE LA FACTURE POUR CHAQUE PRODUIT
                 if ($TSupplierProducts) {
