@@ -56,8 +56,8 @@ llxHeader('', $title);
 print load_fiche_titre($langs->trans('ISIWork'), '', 'isiworkconnector@isiworkconnector');
 
 //NOMBRE DE DOCUMENTS DISPONIBLES A IMPORTER
-print "<div>". $nb_waitingfiles . " " . $langs->trans('FilesWaiting'). "</div><br>";
-print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=import">'.$langs->trans("Import").'</a></div>'."\n";
+print "<div>". $nb_waitingfiles . " " . $langs->trans('IWFilesWaiting'). "</div><br>";
+print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=import">'.$langs->trans("IWImport").'</a></div>'."\n";
 
 //RESULTATS DE L'IMPORT
 if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
@@ -71,9 +71,9 @@ if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
         print '<table class="noborder" width="100%">';
         print '<tbody>';
         print '<tr class="liste_titre">';
-        print '<th>Fichier</th>';
-        print '<th>Type document</th>';
-        print '<th>Document créé</th>';
+        print '<th>'. $langs->trans('File') .'</th>';
+        print '<th>'. $langs->trans('IWDocumentType') .'</th>';
+        print '<th>'. $langs->trans('IWDocumentCreated') .'</th>';
         print '</tr>';
         print '<tr>';
 
@@ -120,14 +120,14 @@ if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
     //DOCUMENTS KO
     if ($_SESSION['KO']) {
 
-        print '<div>Echec d\'import ('.count($_SESSION['KO']).')</div>';//KO
+        print '<div>' . $langs->trans('IWImportKO') . ' ('.count($_SESSION['KO']).')</div>';//KO
 
         //ENTETE TABLEAU
         print '<table class="noborder" width="100%">';
         print '<tbody>';
         print '<tr class="liste_titre">';
-        print '<th>Fichier</th>';
-        print '<th>Message d\'erreur</th>';
+        print '<th>'. $langs->trans('File') .'</th>';
+        print '<th>' . $langs->trans('IWErrorMessage') . '</th>';
         print '</tr>';
         print '<tr>';
 

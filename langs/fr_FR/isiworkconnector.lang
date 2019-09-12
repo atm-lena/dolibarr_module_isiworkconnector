@@ -20,7 +20,7 @@ IWCONNECTOR_FTP_USER=Identifiant
 IWCONNECTOR_FTP_PASS=Mot de passe
 IWCONNECTOR_FTP_PASSIVE_MODE=Mode passif
 IWCONNECTOR_FTP_FOLDER=Chemin de dépôt ISIWork personnalisé sur le serveur FTP
-IMPORT_VALIDATION=Validation des documents importés
+IWIMPORT_VALIDATION=Validation des documents importés
 
 # MENU
 TopMenuisiworkconnector=isiworkconnector
@@ -39,6 +39,12 @@ isiworkconnectorStatusShortRefused=Refusée
 isiworkconnectorStatusShortAccepted=Acceptée
 
 # INTERFACE
-Process=Traiter
-FilesWaiting = document(s) en attente
+IWFilesWaiting = document(s) en attente
 IWImport=Importer
+IWErrorMessage=Message d'erreur
+IWImportKO=Echec d'import
+IWDocumentType=Type du document
+IWDocumentCreated=Documents créés
+
+#ERRORS
+ErrorRefAlreadyExists=La référence fournisseur existe déjà

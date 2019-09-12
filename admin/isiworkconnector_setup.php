@@ -121,7 +121,7 @@ setup_print_on_off('IWCONNECTOR_FTP_PASSIVE_MODE');
 
 //Validation des documents créés
 setup_print_title('Import');
-setup_print_on_off('IMPORT_VALIDATION');
+setup_print_on_off('IWIMPORT_VALIDATION');
 
 
 print '</table>';
