@@ -89,7 +89,7 @@ class isiworkconnector extends SeedObject
                     $docType= $domXml->getElementsByTagName('type')->item(0)->nodeValue;
 
                     //TRAITEMENT FACTURES FOURNISSEURS
-                    if ($docType == 'Facture fournisseur') {
+                    if ($docType == 'Facture') {
 
                         $id_newSupplierInvoice = 0;
 
@@ -125,7 +125,7 @@ class isiworkconnector extends SeedObject
                             //ON AJOUTE LA FACTURE AUX DOCS CREES
                             $supplierInvoice = new FactureFournisseur($this->db);
                             $supplierInvoice->fetch($id_newSupplierInvoice);
-                            $TFilesImported['OK'][$fileXML]['type'] = 'Facture fournisseur';
+                            $TFilesImported['OK'][$fileXML]['type'] = 'Facture';
                             $TFilesImported['OK'][$fileXML]['id'] = $supplierInvoice->id;
 
                         }
@@ -329,21 +329,25 @@ class isiworkconnector extends SeedObject
 
                 //ON VERIFIE SI LE PRODUIT/SERVICE DE LA LIGNE EXISTE
                 $refProduct = $line->getElementsByTagName('ref')->item(0)->nodeValue;            //id produit en fonction de la ref donnée dans le fichier xml
-                $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'product WHERE ref = "' . $refProduct . '"';
-                $resql = $this->db->query($sql);
+                if(!empty($refProduct)) {
+	                $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'product WHERE ref = "' . $refProduct . '"';
+	                $resql = $this->db->query($sql);
 
-                if($this->db->num_rows($resql) == 1) {
-                    $product = $this->db->fetch_object($resql);
+	                if ($this->db->num_rows($resql) == 1) {
+		                $product = $this->db->fetch_object($resql);
+	                } else {
+		                if ($this->db->num_rows($resql) == 0) {
+			                $error++;
+			                $this->error = 'Le produit/service "' . $refProduct . '" est inexistant';
+			                continue;
+		                } elseif ($this->db->num_rows($resql) > 1) {
+			                $error++;
+			                $this->error = 'Plusieurs produits/services existants : ref ' . $refProduct;
+			                continue;
+		                }
+	                }
                 } else {
-                    if ($this->db->num_rows($resql) == 0) {
-                        $error++;
-                        $this->error = 'Le produit/service "' . $refProduct . '" est inexistant';
-                        continue;
-                    } elseif ($this->db->num_rows($resql) > 1) {
-                        $error++;
-                        $this->error = 'Plusieurs produits/services existants : ref ' . $refProduct;
-                        continue;
-                    }
+	                continue;
                 }
 
                 //PRODUIT EXISTE : ON RECUPERE LES INFOS DU PRODUIT
@@ -365,13 +369,7 @@ class isiworkconnector extends SeedObject
                     }
 
                     //réduction
-                    $remise_percent = $line->getElementsByTagName('remise_percent')->item(0)->nodeValue;
-                    if (!empty($remise_percent)) {
-                        $TSupplierProducts[$product->rowid]['remise_percent'] = $remise_percent;
-                    } else {
-                        $error++;
-                        $this->error = 'Pas de remise renseignée pour le produit/service "' . $refProduct . '"';
-                    }
+	                $TSupplierProducts[$product->rowid]['remise_percent'] = $line->getElementsByTagName('remise_percent')->item(0)->nodeValue;
 
                     //label
                     $TSupplierProducts[$product->rowid]['label'] = $line->getElementsByTagName('label')->item(0)->nodeValue;
@@ -393,8 +391,7 @@ class isiworkconnector extends SeedObject
                     if (!empty($tva_tx)) {
                         $TSupplierProducts[$product->rowid]['tva_tx'] = $tva_tx;
                     } else {
-                        $error++;
-                        $this->error = 'Pas de taux de tva renseigné pour le produit/service "' . $refProduct . '"';
+	                    $TSupplierProducts[$product->rowid]['tva_tx'] = 20;
                     }
                 }
 
