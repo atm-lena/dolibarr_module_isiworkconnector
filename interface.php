@@ -92,7 +92,7 @@ if(!empty($_SESSION['OK']) || !empty($_SESSION['KO'])) {
             print '<td>'.$doc['type'].'</td>';
 
             //LIEN VERS L'OBJET CREE
-            if($doc['type'] == "Facture fournisseur"){                                                          //facture fournisseur
+            if($doc['type'] == "Facture"){                                                          //facture fournisseur
 
                 //ON RECUPERE LA REFERENCE DE LA FACTURE CREEE
                 $sql = "SELECT ref FROM " .MAIN_DB_PREFIX. "facture_fourn WHERE rowid=" . $doc['id'];
