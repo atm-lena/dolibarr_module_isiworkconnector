@@ -327,73 +327,78 @@ class isiworkconnector extends SeedObject
 
             foreach ($lines as $line) {
 
-                //ON VERIFIE SI LE PRODUIT/SERVICE DE LA LIGNE EXISTE
-                $refProduct = $line->getElementsByTagName('ref')->item(0)->nodeValue;            //id produit en fonction de la ref donnée dans le fichier xml
-                if(!empty($refProduct)) {
-	                $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'product WHERE ref = "' . $refProduct . '"';
-	                $resql = $this->db->query($sql);
 
-	                if ($this->db->num_rows($resql) == 1) {
-		                $product = $this->db->fetch_object($resql);
-	                } else {
-		                if ($this->db->num_rows($resql) == 0) {
-			                $error++;
-			                $this->error = 'Le produit/service "' . $refProduct . '" est inexistant';
-			                continue;
-		                } elseif ($this->db->num_rows($resql) > 1) {
-			                $error++;
-			                $this->error = 'Plusieurs produits/services existants : ref ' . $refProduct;
-			                continue;
-		                }
-	                }
-                } else {
-	                continue;
-                }
+                $refProduct = $line->getElementsByTagName('ref')->item(0)->nodeValue;           //id produit en fonction de la ref donnée dans le fichier xml
+	            $pu_ht = $line->getElementsByTagName('pu_ht')->item(0)->nodeValue;
 
-                //PRODUIT EXISTE : ON RECUPERE LES INFOS DU PRODUIT
-                if(!$error) {
+	            if(!empty($refProduct) && !empty($pu_ht)) {                                     //on traite la ligne que si la référence produit et le pu_ht est renseigné
 
-                    //id
-                    $TSupplierProducts[$product->rowid]['id_product'] = $product->rowid;
+		            //ON VERIFIE SI LE PRODUIT/SERVICE DE LA LIGNE EXISTE
+		            $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'product WHERE ref = "' . $refProduct . '"';
+		            $resql = $this->db->query($sql);
 
-                    //type
-                    $TSupplierProducts[$product->rowid]['type'] = $product->fk_product_type;
+		            if ($this->db->num_rows($resql) == 1) {
+			            $product = $this->db->fetch_object($resql);
+		            } else {
+			            if ($this->db->num_rows($resql) == 0) {
+				            $error++;
+				            $this->error = 'Le produit/service "' . $refProduct . '" est inexistant';
+				            continue;
+			            } elseif ($this->db->num_rows($resql) > 1) {
+				            $error++;
+				            $this->error = 'Plusieurs produits/services existants : ref ' . $refProduct;
+				            continue;
+			            }
+		            }
 
-                    //quantité
-                    $qty = $line->getElementsByTagName('qty')->item(0)->nodeValue;
-                    if (!empty($qty)) {
-                        $TSupplierProducts[$product->rowid]['qty'] = $qty;
-                    } else {
-                        $error++;
-                        $this->error = 'Pas de quantité renseignée pour le produit/service "' . $refProduct . '"';
-                    }
+		            //PRODUIT EXISTE : ON RECUPERE LES INFOS DU PRODUIT
+		            if (!$error) {
 
-                    //réduction
-	                $TSupplierProducts[$product->rowid]['remise_percent'] = $line->getElementsByTagName('remise_percent')->item(0)->nodeValue;
+			            //id
+			            $TSupplierProducts[$product->rowid]['id_product'] = $product->rowid;
 
-                    //label
-                    $TSupplierProducts[$product->rowid]['label'] = $line->getElementsByTagName('label')->item(0)->nodeValue;
+			            //type
+			            $TSupplierProducts[$product->rowid]['type'] = $product->fk_product_type;
 
-                    //description
-                    $TSupplierProducts[$product->rowid]['description'] = $line->getElementsByTagName('description')->item(0)->nodeValue;
+			            //pu_ht
+			            $TSupplierProducts[$product->rowid]['price'] = $pu_ht;
 
-                    //prix unitaire ht
-                    $pu_ht = $line->getElementsByTagName('pu_ht')->item(0)->nodeValue;
-                    if (!empty($pu_ht)) {
-                        $TSupplierProducts[$product->rowid]['price'] = $pu_ht;
-                    } else {
-                        $error++;
-                        $this->error = 'Pas de prix HT renseigné pour le produit/service : "' . $refProduct . '"';
-                    }
+			            //quantité
+			            $qty = $line->getElementsByTagName('qty')->item(0)->nodeValue;
+			            if (!empty($qty)) {
+				            $TSupplierProducts[$product->rowid]['qty'] = $qty;
+			            } else {
+				            $TSupplierProducts[$product->rowid]['qty'] = 1;
+			            }
 
-                    //taux de tva
-                    $tva_tx = $line->getElementsByTagName('tva_tx')->item(0)->nodeValue;
-                    if (!empty($tva_tx)) {
-                        $TSupplierProducts[$product->rowid]['tva_tx'] = $tva_tx;
-                    } else {
-	                    $TSupplierProducts[$product->rowid]['tva_tx'] = 20;
-                    }
-                }
+			            //réduction
+			            $TSupplierProducts[$product->rowid]['remise_percent'] = $line->getElementsByTagName('remise_percent')->item(0)->nodeValue;
+
+			            //label
+			            $TSupplierProducts[$product->rowid]['label'] = $line->getElementsByTagName('label')->item(0)->nodeValue;
+
+			            //description
+			            $TSupplierProducts[$product->rowid]['description'] = $line->getElementsByTagName('description')->item(0)->nodeValue;
+
+			            //taux de tva
+			            $tva_tx = $line->getElementsByTagName('tva_tx')->item(0)->nodeValue;
+			            if (!empty($tva_tx)) {
+				            $TSupplierProducts[$product->rowid]['tva_tx'] = $tva_tx;
+			            } else {
+				            $TSupplierProducts[$product->rowid]['tva_tx'] = 20;
+			            }
+		            }
+	            } else {
+	            	if (empty($pu_ht) && !empty($refProduct)){
+			            $error++;
+			            $this->error = 'Le prix hors taxe du produit ' . $refProduct . " n'est pas renseigné";
+		            } elseif (!empty($pu_ht) && empty($refProduct)) {
+			            $error++;
+			            $this->error = "Le prix hors taxe d'un montant de "  . $pu_ht . " n'a pas de référence produit";
+		            } elseif (empty($pu_ht) && !empty($refProduct)){
+	            		continue;
+		            }
+	        }
 
             }
         }
