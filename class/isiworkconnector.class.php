@@ -285,37 +285,73 @@ class isiworkconnector extends SeedObject
         $error = 0;
 
         //ON CREE UNE NOUVELLE FACTURE FOURNISSEUR
-        $supplierInvoice = new FactureFournisseur($this->db);
 
-        //ON RENSEIGNE LES INFORMATIONS OBLIGATOIRES POUR UNE FACTURE
-        $fournisseur =  $domXml->getElementsByTagName('fournisseur')->item(0)->nodeValue;
-        $date =  $domXml->getElementsByTagName('date')->item(0)->nodeValue;
-        $ref_supplier =  $domXml->getElementsByTagName('ref_supplier')->item(0)->nodeValue;
+	    $supplierInvoice = new FactureFournisseur($this->db);
 
-        if(!empty($fournisseur) && !empty($date) && !empty($ref_supplier)){
+	    //ON RECUPERE LES INFORMATIONS OBLIGATOIRES DU XML
 
-            //on vérifie si le fournisseur existe ou si il en existe plusieurs
-            $sql = 'SELECT * FROM ' .MAIN_DB_PREFIX. 'societe WHERE code_fournisseur IS NOT NULL AND nom = "'. $fournisseur . '";';
-            $resql = $this->db->query($sql);
-            if(!($this->db->num_rows($resql))){
-                $error++;
-                $this->error = 'Le fournisseur "' .$fournisseur. '" n\'existe pas';
-            } elseif ($this->db->num_rows($resql) > 1){
-                $error++;
-                $this->error = 'Plusieurs fournisseurs au nom de "' .$fournisseur. '"';
-            } else {
-                $supplier = $this->db->fetch_object($resql);
-                $supplierInvoice->socid = $supplier->rowid;
-            }
+	    if(!empty ($domXml->getElementsByTagName('siret')->item(0)->nodeValue)){                //traitement fournisseur
+		    $supplier_siret =  $domXml->getElementsByTagName('siret')->item(0)->nodeValue;
+	    } elseif (!empty($domXml->getElementsByTagName('code')->item(0)->nodeValue)) {
+		    $supplier_code =  $domXml->getElementsByTagName('code')->item(0)->nodeValue;
+	    } elseif (!empty($domXml->getElementsByTagName('fournisseur')->item(0)->nodeValue)){
+		    $supplier_name =  $domXml->getElementsByTagName('fournisseur')->item(0)->nodeValue;
+	    } else {
+		    $error++;
+		    $this->error = "Pas de fournisseur renseigné";
+	    }
 
-            $supplierInvoice->date = strftime('%Y-%m-%d',strtotime($date));
+	    if(!empty($supplier_siret)) {
+		    $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'societe WHERE code_fournisseur IS NOT NULL AND siret = "' . $supplier_siret . '";';
+		    $resql = $this->db->query($sql);
+		    if(!($this->db->num_rows($resql))){
+			    $supplier_siren = substr($supplier_siret, 0, 9);
+			    $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'societe WHERE code_fournisseur IS NOT NULL AND siren = "' . $supplier_siren . '";';
+			    $resql = $this->db->query($sql);
+		    }
 
-            $supplierInvoice->ref_supplier = $ref_supplier;
+	    } elseif (!empty($supplier_code)){
+		    $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'societe WHERE code_fournisseur IS NOT NULL AND code_fournisseur = "' . $supplier_code . '";';
+		    $resql = $this->db->query($sql);
 
-        } else {
-            $error++;
-            $this->error = 'Fichier xml incomplet';
-        }
+	    } elseif (!empty($supplier_name)) {
+		    $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'societe WHERE code_fournisseur IS NOT NULL AND nom = "' . $supplier_name . '";';
+		    $resql = $this->db->query($sql);
+	    }
+
+	    if($resql) {
+		    if (!($this->db->num_rows($resql))) {
+			    $error++;
+			    $this->error = 'Le fournisseur n\'existe pas';
+		    } elseif ($this->db->num_rows($resql) > 1) {
+			    $error++;
+			    $this->error = 'Plusieurs fournisseurs trouvés';
+		    } else {
+			    $supplier = $this->db->fetch_object($resql);
+		    }
+	    }
+
+	    if(!empty ($domXml->getElementsByTagName('date')->item(0)->nodeValue)) {                 //traitement date
+		    $date = $domXml->getElementsByTagName('date')->item(0)->nodeValue;
+	    } else {
+		    $error++;
+		    $this->error = "Pas de date renseignée";
+	    }
+
+	    if(!empty ($domXml->getElementsByTagName('ref_supplier')->item(0)->nodeValue)) {        //traitement référence fournisseur
+		    $ref_supplier = $domXml->getElementsByTagName('ref_supplier')->item(0)->nodeValue;
+	    } else {
+		    $error++;
+		    $this->error = "Pas de référence fournisseur renseignée";
+	    }
+
+	    //ON RENSEIGNE LES INFORMATIONS OBLIGATOIRES POUR UNE FACTURE FOURNISSEUR
+
+	    if(!$error){
+		    $supplierInvoice->socid = $supplier->rowid;
+		    $supplierInvoice->date = strftime('%Y-%m-%d', strtotime($date));
+		    $supplierInvoice->ref_supplier = $ref_supplier;
+	    }
 
 
         //ON VERIFIE SI LES INFOS PRODUIT/SERVICE SONT OK
@@ -397,8 +433,8 @@ class isiworkconnector extends SeedObject
 			            $this->error = "Le prix hors taxe d'un montant de "  . $pu_ht . " n'a pas de référence produit";
 		            } elseif (empty($pu_ht) && !empty($refProduct)){
 	            		continue;
-		            }
-	        }
+	            	}
+	            }
 
             }
         }
