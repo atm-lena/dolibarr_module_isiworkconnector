@@ -473,7 +473,7 @@ class isiworkconnector extends SeedObject
                 $local_file_pdf = $local_dir . '/' . $remote_file_pdf;
                 $local_file_xml = $local_dir . '/' . $remote_file_xml;
 
-                $res = ftp_get($ftpc, $local_file_pdf, $remote_file_pdf, FTP_ASCII);
+                $res = ftp_get($ftpc, $local_file_pdf, $remote_file_pdf, FTP_BINARY);
                 if (!$res) {
                     $error++;
                     $this->error = 'Fichier pdf non joint à la facture créée : ' . $supplierInvoice->ref;
