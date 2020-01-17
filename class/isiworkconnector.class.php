@@ -302,9 +302,12 @@ class isiworkconnector extends SeedObject
 	    }
 
 	    if(!empty($supplier_siret)) {
+
+	        $supplier_siret = str_replace(' ', '', $supplier_siret);
 		    $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'societe WHERE code_fournisseur IS NOT NULL AND siret = "' . $supplier_siret . '";';
 		    $resql = $this->db->query($sql);
-		    if(!($this->db->num_rows($resql))){
+
+            if(!($this->db->num_rows($resql))){
 			    $supplier_siren = substr($supplier_siret, 0, 9);
 			    $sql = 'SELECT * FROM ' . MAIN_DB_PREFIX . 'societe WHERE code_fournisseur IS NOT NULL AND siren = "' . $supplier_siren . '";';
 			    $resql = $this->db->query($sql);
@@ -364,7 +367,7 @@ class isiworkconnector extends SeedObject
             foreach ($lines as $line) {
 
 
-                $refProduct = $line->getElementsByTagName('ref')->item(0)->nodeValue;           //id produit en fonction de la ref donnée dans le fichier xml
+                $refProduct = $line->getElementsByTagName('code_art')->item(0)->nodeValue;           //id produit en fonction de la ref donnée dans le fichier xml
 	            $pu_ht = $line->getElementsByTagName('pu_ht')->item(0)->nodeValue;
 
 	            if(!empty($refProduct) && !empty($pu_ht)) {                                     //on traite la ligne que si la référence produit et le pu_ht est renseigné
